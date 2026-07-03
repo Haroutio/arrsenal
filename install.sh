@@ -181,6 +181,12 @@ main() {
   if [ -z "${ARRSENAL_NO_EXEC:-}" ]; then
     rm -rf "$tmp"
     trap - EXIT
+    # Under curl|bash our stdin IS the pipe, and the TUI would inherit it
+    # and correctly refuse ("no terminal attached") despite the user sitting
+    # at one. Hand it the real terminal when there is one.
+    if { : < /dev/tty; } 2>/dev/null; then
+      exec sudo "$INSTALL_DIR/arrsenal" < /dev/tty
+    fi
     exec sudo "$INSTALL_DIR/arrsenal"
   fi
 }
