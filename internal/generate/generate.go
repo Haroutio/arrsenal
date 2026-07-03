@@ -157,6 +157,12 @@ func renderService(s *state.State, app registry.App) service {
 		_, container := s.WebPorts(app)
 		svc.Environment[app.WebPortEnv] = strconv.Itoa(container)
 	}
+	if app.ID == "plex" {
+		// The claim token (plex.tv/claim, 4-minute expiry) is a per-run
+		// value: cmd writes it into this 0600 env-file right before
+		// bring-up — never into the state or these artifacts (issue #26).
+		svc.EnvFile = []string{"${APPDATA}/plex/claim.env"}
+	}
 
 	switch {
 	case app.ID == "qbittorrent" && s.VPNEnabled():

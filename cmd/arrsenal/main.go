@@ -69,6 +69,7 @@ type options struct {
 	vpnProvider  string
 	vpnKey       string
 	vpnCountries string
+	plexClaim    string
 }
 
 // parseFlags returns nil when the invocation was informational (--version).
@@ -99,6 +100,7 @@ func parseFlags(args []string, out *os.File) *options {
 	fs.StringVar(&o.vpnProvider, "vpn-provider", "", "route qBittorrent through gluetun with this VPN provider (wireguard)")
 	fs.StringVar(&o.vpnKey, "vpn-wireguard-key", "", "wireguard private key for the VPN (persisted 0600 in the state file)")
 	fs.StringVar(&o.vpnCountries, "vpn-countries", "", "optional comma-separated server countries for the VPN")
+	fs.StringVar(&o.plexClaim, "plex-claim", "", "claim token from https://plex.tv/claim (valid 4 minutes; first boot only)")
 	_ = fs.Parse(args)
 
 	if *showVersion {

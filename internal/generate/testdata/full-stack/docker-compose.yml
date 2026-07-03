@@ -21,6 +21,22 @@ services:
     volumes:
     - ${APPDATA}/bazarr:/config
     - ${DATA}/media:/data/media
+  emby:
+    image: lscr.io/linuxserver/emby:latest
+    container_name: emby
+    restart: unless-stopped
+    networks:
+    - arrsenal
+    environment:
+      PGID: ${PGID}
+      PUID: ${PUID}
+      TZ: ${TZ}
+      UMASK: ${UMASK}
+    ports:
+    - "8097:8096"
+    volumes:
+    - ${APPDATA}/emby:/config
+    - ${DATA}/media:/media
   homepage:
     image: ghcr.io/gethomepage/homepage:latest
     container_name: homepage
@@ -82,6 +98,41 @@ services:
     volumes:
     - ${APPDATA}/lidarr:/config
     - ${DATA}:/data
+  overseerr:
+    image: lscr.io/linuxserver/overseerr:latest
+    container_name: overseerr
+    restart: unless-stopped
+    networks:
+    - arrsenal
+    environment:
+      PGID: ${PGID}
+      PUID: ${PUID}
+      TZ: ${TZ}
+      UMASK: ${UMASK}
+    ports:
+    - "5056:5055"
+    volumes:
+    - ${APPDATA}/overseerr:/config
+  plex:
+    image: lscr.io/linuxserver/plex:latest
+    container_name: plex
+    restart: unless-stopped
+    networks:
+    - arrsenal
+    environment:
+      PGID: ${PGID}
+      PUID: ${PUID}
+      TZ: ${TZ}
+      UMASK: ${UMASK}
+      VERSION: docker
+    env_file:
+    - ${APPDATA}/plex/claim.env
+    ports:
+    - "32400:32400"
+    volumes:
+    - ${APPDATA}/plex:/config
+    - ${DATA}/media:/media
+    - /dev/shm/plex:/transcode
   prowlarr:
     image: lscr.io/linuxserver/prowlarr:latest
     container_name: prowlarr

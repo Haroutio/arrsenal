@@ -1,6 +1,9 @@
 package registry
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestRegistryIsValid(t *testing.T) {
 	if err := Validate(); err != nil {
@@ -8,9 +11,11 @@ func TestRegistryIsValid(t *testing.T) {
 	}
 }
 
-func TestV01MenuIsExactlyTheAgreedTen(t *testing.T) {
+func TestMenuIsExactlyTheAgreedSet(t *testing.T) {
+	// v0.1's ten plus v0.3's media-server choice (#26): Plex, Emby, Overseerr.
 	want := []string{
-		"jellyfin", "jellyseerr", "prowlarr", "sonarr", "radarr",
+		"jellyfin", "plex", "emby", "jellyseerr", "overseerr",
+		"prowlarr", "sonarr", "radarr",
 		"lidarr", "bazarr", "sabnzbd", "qbittorrent", "homepage",
 	}
 	all := All()
@@ -47,8 +52,26 @@ func TestRoleQueries(t *testing.T) {
 		t.Fatalf("got %d download clients, want 2 (sabnzbd, qbittorrent)", len(dls))
 	}
 	ms := ByRole(RoleMediaServer)
-	if len(ms) != 1 || ms[0].ID != "jellyfin" {
-		t.Fatalf("media servers = %+v, want exactly jellyfin in v0.1", ms)
+	if len(ms) != 3 || ms[0].ID != "jellyfin" {
+		t.Fatalf("media servers = %+v, want jellyfin (flagship, first), plex, emby", ms)
+	}
+	req := ByRole(RoleRequests)
+	if len(req) != 2 {
+		t.Fatalf("requests apps = %+v, want jellyseerr + overseerr", req)
+	}
+	// The paywall honesty contract (#26): paid-transcode servers must say so
+	// at selection time.
+	for _, id := range []string{"plex", "emby"} {
+		a, _ := ByID(id)
+		found := false
+		for _, w := range a.Warnings {
+			if strings.Contains(w, "free") {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("%s must warn about paid hardware transcoding", id)
+		}
 	}
 }
 
@@ -101,10 +124,10 @@ func TestHardlinkLayoutInvariant(t *testing.T) {
 	}
 }
 
-func TestOnlyJellyfinTakesTheGPU(t *testing.T) {
+func TestOnlyMediaServersTakeTheGPU(t *testing.T) {
 	for _, a := range All() {
-		if a.GPU != (a.ID == "jellyfin") {
-			t.Errorf("%s: GPU = %v — in v0.1 only jellyfin is GPU-capable", a.ID, a.GPU)
+		if a.GPU != (a.Role == RoleMediaServer) {
+			t.Errorf("%s: GPU = %v — exactly the media servers are GPU-capable", a.ID, a.GPU)
 		}
 	}
 }

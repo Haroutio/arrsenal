@@ -253,7 +253,7 @@ func TestValidateRejectsBadStates(t *testing.T) {
 		"newline in tz":      func(s *State) { s.TZ = "Etc/UTC\nEVIL=1" },
 		"hash in tz":         func(s *State) { s.TZ = "Etc/UTC # comment" },
 		"bad gpu":            func(s *State) { s.GPU = "voodoo2" },
-		"remap unknown app":  func(s *State) { s.PortRemaps["plex"] = map[int]int{32400: 32400} },
+		"remap unknown app":  func(s *State) { s.PortRemaps["winamp"] = map[int]int{32400: 32400} },
 		"remap unknown port": func(s *State) { s.PortRemaps["sonarr"] = map[int]int{1234: 5678} },
 		"remap port range":   func(s *State) { s.PortRemaps["sonarr"] = map[int]int{8989: 70000} },
 		"remap collision": func(s *State) {

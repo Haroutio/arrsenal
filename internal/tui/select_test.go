@@ -43,6 +43,12 @@ func TestSelectShowsEveryRegistryAppGrouped(t *testing.T) {
 			t.Errorf("view is missing group header %s", group)
 		}
 	}
+	// The paywall honesty contract (#26): warnings render AT SELECTION TIME.
+	for _, want := range []string{"Plex Pass", "Emby Premiere", "plex.tv/claim"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("selection screen must surface the warning %q", want)
+		}
+	}
 }
 
 func TestSelectPrePopulatesFromState(t *testing.T) {

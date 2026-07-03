@@ -62,10 +62,12 @@ func EnsureTree(s *state.State) ([]CreatedDir, error) {
 	for _, id := range s.Apps {
 		targets = append(targets, filepath.Join(s.AppdataRoot, id))
 	}
-	// Jellyfin's transcode scratch lives on tmpfs and evaporates on reboot;
-	// docker recreates bind sources as root, so make it ours instead.
-	if selected(s, "jellyfin") {
-		targets = append(targets, "/dev/shm/jellyfin")
+	// Transcode scratch dirs live on tmpfs and evaporate on reboot; docker
+	// recreates bind sources as root, so make them ours instead.
+	for _, id := range []string{"jellyfin", "plex"} {
+		if selected(s, id) {
+			targets = append(targets, "/dev/shm/"+id)
+		}
 	}
 
 	for _, dir := range targets {

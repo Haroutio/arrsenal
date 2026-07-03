@@ -64,6 +64,12 @@ func goldenCases() map[string]*state.State {
 	split.DataRoot = "/mnt/pool/data"
 	split.DownloadsRoot = "/mnt/nvme/downloads"
 
+	// Issue #26: the Plex path — Plex + Overseerr side by side with an arr,
+	// GPU block present, claim env-file referenced.
+	plex := baseState()
+	plex.Apps = []string{"plex", "overseerr", "sonarr"}
+	plex.GPU = state.GPUNvidia
+
 	// Issue #27: gluetun fronting qBittorrent.
 	vpn := baseState()
 	vpn.Apps = []string{"sonarr", "qbittorrent"}
@@ -80,6 +86,42 @@ func goldenCases() map[string]*state.State {
 		"jellyfin-hostnet": hostnet,
 		"split-storage":    split,
 		"vpn-qbittorrent":  vpn,
+		"plex-stack":       plex,
+	}
+}
+
+func TestPlexStackShape(t *testing.T) {
+	got := render(t, goldenCases()["plex-stack"])
+	var doc struct {
+		Services map[string]struct {
+			EnvFile []string          `yaml:"env_file"`
+			Ports   []string          `yaml:"ports"`
+			Deploy  map[string]any    `yaml:"deploy"`
+			Env     map[string]string `yaml:"environment"`
+		} `yaml:"services"`
+	}
+	if err := yamlUnmarshal(got.Compose, &doc); err != nil {
+		t.Fatal(err)
+	}
+	px := doc.Services["plex"]
+	if len(px.EnvFile) != 1 || px.EnvFile[0] != "${APPDATA}/plex/claim.env" {
+		t.Fatalf("plex must reference the claim env-file: %v", px.EnvFile)
+	}
+	if px.Deploy == nil {
+		t.Fatal("plex must carry the GPU reservation in nvidia mode")
+	}
+	if px.Env["VERSION"] != "docker" {
+		t.Fatalf("plex env: %v", px.Env)
+	}
+	ov := doc.Services["overseerr"]
+	found := false
+	for _, p := range ov.Ports {
+		if p == "5056:5055" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("overseerr must default to host 5056 (jellyseerr owns 5055): %v", ov.Ports)
 	}
 }
 
