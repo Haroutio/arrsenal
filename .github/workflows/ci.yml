@@ -109,6 +109,9 @@ jobs:
           grep -q "existed" /tmp/report.log
           if grep -q "✗" /tmp/report.log; then echo "re-run produced failures" && exit 1; fi
           if grep -qE "^  ✓" /tmp/report.log; then echo "re-run re-wired something — idempotency broken" && exit 1; fi
+      - name: arrsenal update pulls and reconciles
+        run: |
+          ./arrsenal update --state /tmp/arrtest/arrsenal.yaml --artifacts-dir /tmp/arrtest
       - name: deselecting an app removes its container, preserves its config
         run: |
           ./arrsenal --yes --apps prowlarr,sonarr --gpu none \

@@ -1,6 +1,7 @@
 // Command arrsenal is the Arrsenal installer: an interactive TUI that stands
 // up a complete, auto-wired servarr media stack on a Linux host. With --yes
-// it runs headless from flags instead (CI, scripts).
+// it runs headless from flags instead (CI, scripts). Subcommands handle the
+// lifecycle: `arrsenal update` pulls fresh images and reconciles.
 package main
 
 import (
@@ -17,11 +18,27 @@ import (
 var version = "dev"
 
 func main() {
-	opts := parseFlags(os.Args[1:], os.Stdout)
+	args := os.Args[1:]
+	command := ""
+	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
+		command, args = args[0], args[1:]
+	}
+
+	opts := parseFlags(args, os.Stdout)
 	if opts == nil {
 		return // --version or --help handled
 	}
-	if err := run(*opts); err != nil {
+
+	var err error
+	switch command {
+	case "":
+		err = run(*opts)
+	case "update":
+		err = runUpdate(*opts)
+	default:
+		err = fmt.Errorf("unknown command %q (commands: update; no command = install/reconfigure)", command)
+	}
+	if err != nil {
 		fmt.Fprintf(os.Stderr, "arrsenal: %v\n", err)
 		os.Exit(1)
 	}
