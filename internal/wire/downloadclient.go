@@ -90,9 +90,15 @@ func EnsureDownloadClient(ctx context.Context, arr *Client, t DownloadClientTarg
 	)
 }
 
-// rootFolder mirrors the arr rootfolder resource.
+// rootFolder mirrors the arr rootfolder resource. The extra fields are
+// Lidarr's: its root folders carry defaults for new artists and its API
+// rejects a bare path (NotEmptyValidator on name, GreaterThanValidator on
+// the profile ids — learned from a live 400).
 type rootFolder struct {
-	Path string `json:"path"`
+	Path                     string `json:"path"`
+	Name                     string `json:"name,omitempty"`
+	DefaultQualityProfileID  int    `json:"defaultQualityProfileId,omitempty"`
+	DefaultMetadataProfileID int    `json:"defaultMetadataProfileId,omitempty"`
 }
 
 // EnsureRootFolder points an arr at its slice of the fixed media tree
@@ -109,7 +115,27 @@ func EnsureRootFolder(ctx context.Context, arr *Client, apiBase, arrName, path s
 		func(r rootFolder) string { return r.Path },
 		path,
 		func() error {
-			return arr.PostJSON(ctx, apiBase+"/rootfolder", rootFolder{Path: path}, nil)
+			payload := rootFolder{Path: path}
+			if apiBase == "/api/v1" {
+				// Lidarr: fill the required defaults from the app's own
+				// profile lists (a fresh install ships one of each).
+				var ids struct{ quality, metadata int }
+				var profiles []struct {
+					ID int `json:"id"`
+				}
+				if err := arr.GetJSON(ctx, apiBase+"/qualityprofile", &profiles); err != nil || len(profiles) == 0 {
+					return fmt.Errorf("reading quality profiles for root folder defaults: %w", err)
+				}
+				ids.quality = profiles[0].ID
+				if err := arr.GetJSON(ctx, apiBase+"/metadataprofile", &profiles); err != nil || len(profiles) == 0 {
+					return fmt.Errorf("reading metadata profiles for root folder defaults: %w", err)
+				}
+				ids.metadata = profiles[0].ID
+				payload.Name = arrName + " library"
+				payload.DefaultQualityProfileID = ids.quality
+				payload.DefaultMetadataProfileID = ids.metadata
+			}
+			return arr.PostJSON(ctx, apiBase+"/rootfolder", payload, nil)
 		},
 	)
 }

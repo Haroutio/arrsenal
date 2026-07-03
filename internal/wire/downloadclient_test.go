@@ -166,8 +166,16 @@ func TestEnsureLidarrUsesAPIV1(t *testing.T) {
 		v1Hits.Add(1)
 		_, _ = w.Write([]byte(`[]`))
 	})
-	mux.HandleFunc("POST /api/v1/rootfolder", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("GET /api/v1/qualityprofile", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`[{"id":7}]`))
+	})
+	mux.HandleFunc("GET /api/v1/metadataprofile", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`[{"id":3}]`))
+	})
+	var posted rootFolder
+	mux.HandleFunc("POST /api/v1/rootfolder", func(w http.ResponseWriter, r *http.Request) {
 		v1Hits.Add(1)
+		_ = json.NewDecoder(r.Body).Decode(&posted)
 		w.WriteHeader(http.StatusCreated)
 		_, _ = w.Write([]byte(`{}`))
 	})
@@ -177,5 +185,10 @@ func TestEnsureLidarrUsesAPIV1(t *testing.T) {
 	r := EnsureRootFolder(context.Background(), wireClient(srv.URL), "/api/v1", "Lidarr", "/data/media/music")
 	if r.Outcome != OutcomeWired || v1Hits.Load() != 2 {
 		t.Fatalf("lidarr root folder must ride /api/v1: %+v hits=%d", r, v1Hits.Load())
+	}
+	// Lidarr rejects a bare path: name + profile defaults are required, and
+	// the defaults must come from the app's own profile lists.
+	if posted.Name == "" || posted.DefaultQualityProfileID != 7 || posted.DefaultMetadataProfileID != 3 {
+		t.Fatalf("lidarr payload must carry name + profile defaults: %+v", posted)
 	}
 }
