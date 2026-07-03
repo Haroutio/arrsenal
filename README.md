@@ -1,5 +1,7 @@
 # Arrsenal
 
+[![CI](https://github.com/Haroutio/arrsenal/actions/workflows/ci.yml/badge.svg)](https://github.com/Haroutio/arrsenal/actions/workflows/ci.yml)
+
 **One command. A complete, self-hosted media-automation stack. Actually wired together.**
 
 Arrsenal is an interactive installer for the *servarr* ecosystem: pick your apps in a
