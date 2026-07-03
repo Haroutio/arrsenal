@@ -62,6 +62,9 @@ type options struct {
 	adminUser    string
 	adminPass    string
 	purge        bool
+
+	downloadsRoot   string
+	jellyfinHostNet bool
 }
 
 // parseFlags returns nil when the invocation was informational (--version).
@@ -87,6 +90,8 @@ func parseFlags(args []string, out *os.File) *options {
 	fs.StringVar(&o.adminUser, "admin-user", "admin", "admin username applied to the apps during wiring")
 	fs.StringVar(&o.adminPass, "admin-pass", "", "admin password for wiring (headless; interactive mode prompts)")
 	fs.BoolVar(&o.purge, "purge", false, "with the uninstall command: also delete app configs, state, and artifacts (typed confirmation required)")
+	fs.StringVar(&o.downloadsRoot, "downloads-root", "", "put the download trees on their own filesystem (blank = under data root, hardlink imports)")
+	fs.BoolVar(&o.jellyfinHostNet, "jellyfin-host-network", false, "run Jellyfin on host networking (DLNA/discovery)")
 	_ = fs.Parse(args)
 
 	if *showVersion {
