@@ -76,17 +76,27 @@ jobs:
         run: |
           SONK=$(sed -nE 's#.*<ApiKey>([^<]+)</ApiKey>.*#\1#p' /tmp/arrtest/appdata/sonarr/config.xml)
           PROWK=$(sed -nE 's#.*<ApiKey>([^<]+)</ApiKey>.*#\1#p' /tmp/arrtest/appdata/prowlarr/config.xml)
-          echo "sonarr download clients:"
-          curl -sf -H "X-Api-Key: $SONK" http://localhost:8989/api/v3/downloadclient | tee /tmp/dc.json | grep -q '"name":"SABnzbd"'
-          echo "sonarr root folders:"
-          curl -sf -H "X-Api-Key: $SONK" http://localhost:8989/api/v3/rootfolder | grep -q '"/data/media/tv"'
-          echo "sonarr auth is forms:"
-          curl -sf -H "X-Api-Key: $SONK" http://localhost:8989/api/v3/config/host | grep -q '"authenticationMethod":"forms"'
-          echo "prowlarr knows sonarr:"
-          curl -sf -H "X-Api-Key: $PROWK" http://localhost:9696/api/v1/applications | grep -q '"name":"Sonarr"'
+          assert_json() { # url header jq-expr label
+            body=$(curl -s -H "$2" "$1")
+            if ! echo "$body" | jq -e "$3" >/dev/null; then
+              echo "ASSERTION FAILED: $4"
+              echo "GET $1 returned:"; echo "$body" | head -c 2000; echo
+              exit 1
+            fi
+            echo "ok: $4"
+          }
+          assert_json http://localhost:8989/api/v3/downloadclient "X-Api-Key: $SONK" \
+            '.[] | select(.name=="SABnzbd")' "sonarr has the SABnzbd download client"
+          assert_json http://localhost:8989/api/v3/rootfolder "X-Api-Key: $SONK" \
+            '.[] | select(.path=="/data/media/tv")' "sonarr has the /data/media/tv root folder"
+          assert_json http://localhost:8989/api/v3/config/host "X-Api-Key: $SONK" \
+            'select(.authenticationMethod=="forms")' "sonarr auth is forms"
+          assert_json http://localhost:9696/api/v1/applications "X-Api-Key: $PROWK" \
+            '.[] | select(.name=="Sonarr")' "prowlarr knows sonarr"
           echo "sab whitelist repaired:"
-          grep -E '^host_whitelist' /tmp/arrtest/appdata/sabnzbd/sabnzbd.ini | grep -q sabnzbd
+          grep -E '^host_whitelist' /tmp/arrtest/appdata/sabnzbd/sabnzbd.ini | tee /dev/stderr | grep -q sabnzbd
           echo "sab folders on the data tree:"
+          grep -E '^(download_dir|complete_dir)' /tmp/arrtest/appdata/sabnzbd/sabnzbd.ini | tee /dev/stderr
           grep -qE '^complete_dir = /data/usenet/complete' /tmp/arrtest/appdata/sabnzbd/sabnzbd.ini
       - name: re-run is idempotent — everything comes back existed, nothing re-wired
         run: |
