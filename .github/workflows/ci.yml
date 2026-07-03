@@ -39,6 +39,45 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y bats
       - run: bats test/install.bats
 
+  # The real thing: build the binary, run it headlessly against the runner's
+  # Docker, and assert the stack actually comes up — then re-run to prove the
+  # declarative regenerator (idempotence + reconciliation of a removal).
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: stable
+      - run: go build -o arrsenal ./cmd/arrsenal
+      - name: headless install brings the stack up
+        run: |
+          ./arrsenal --yes --apps sonarr,sabnzbd --gpu none \
+            --data-root /tmp/arrtest/data --appdata-root /tmp/arrtest/appdata \
+            --state /tmp/arrtest/arrsenal.yaml --artifacts-dir /tmp/arrtest \
+            --puid "$(id -u)" --pgid "$(id -g)"
+      - name: containers are running
+        run: |
+          docker ps --format '{{.Names}} {{.Status}}'
+          docker ps --format '{{.Names}}' | grep -x sonarr
+          docker ps --format '{{.Names}}' | grep -x sabnzbd
+      - name: re-run is idempotent (state file drives it)
+        run: |
+          ./arrsenal --yes --gpu none \
+            --state /tmp/arrtest/arrsenal.yaml --artifacts-dir /tmp/arrtest
+      - name: deselecting an app removes its container, preserves its config
+        run: |
+          ./arrsenal --yes --apps sonarr --gpu none \
+            --state /tmp/arrtest/arrsenal.yaml --artifacts-dir /tmp/arrtest
+          docker ps --format '{{.Names}}' | grep -x sonarr
+          if docker ps -a --format '{{.Names}}' | grep -x sabnzbd; then
+            echo "sabnzbd container should have been reconciled away" && exit 1
+          fi
+          test -d /tmp/arrtest/appdata/sabnzbd || (echo "appdata must be preserved" && exit 1)
+      - name: teardown
+        if: always()
+        run: cd /tmp/arrtest && docker compose down --remove-orphans || true
+
   # Proves the release pipeline on every PR without tagging anything:
   # a full snapshot build must produce both linux binaries + checksums.
   goreleaser-check:

@@ -35,6 +35,15 @@ func (d *Docker) Up(artifactsDir string) error {
 	return nil
 }
 
+// ValidateCompose asks compose itself whether the generated artifacts parse —
+// the authoritative answer, from the same binary that will run them.
+func (d *Docker) ValidateCompose(artifactsDir string) error {
+	if _, err := d.runIn(artifactsDir, "compose", "config", "--quiet"); err != nil {
+		return fmt.Errorf("generated compose file failed validation: %w", err)
+	}
+	return nil
+}
+
 // ReadyResult is one container's readiness verdict.
 type ReadyResult struct {
 	App    string
