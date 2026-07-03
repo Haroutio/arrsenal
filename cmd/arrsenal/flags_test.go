@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -41,5 +42,13 @@ func TestParseFlagsHeadless(t *testing.T) {
 func TestParseFlagsVersionShortCircuits(t *testing.T) {
 	if o := parseFlags([]string{"--version"}, os.NewFile(0, os.DevNull)); o != nil {
 		t.Fatal("--version must not proceed to run")
+	}
+}
+
+func TestUpdateRefusesWithoutState(t *testing.T) {
+	o := parseFlags([]string{"--state", "/nonexistent/dir/arrsenal.yaml"}, os.Stdout)
+	err := runUpdate(*o)
+	if err == nil || !strings.Contains(err.Error(), "nothing installed") {
+		t.Fatalf("update without a state file must explain itself: %v", err)
 	}
 }

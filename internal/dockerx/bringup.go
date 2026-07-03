@@ -43,6 +43,17 @@ func (d *Docker) Up(artifactsDir string, services ...string) error {
 	return nil
 }
 
+// Pull refreshes every image the generated compose references. Output is
+// compose's own progress; the caller follows with Up so new images are
+// actually running (arrsenal update, DESIGN.md §13 v0.3).
+func (d *Docker) Pull(artifactsDir string) (string, error) {
+	out, err := d.runIn(artifactsDir, "compose", "pull")
+	if err != nil {
+		return "", fmt.Errorf("pulling images: %w", err)
+	}
+	return out, nil
+}
+
 // ValidateCompose asks compose itself whether the generated artifacts parse —
 // the authoritative answer, from the same binary that will run them.
 func (d *Docker) ValidateCompose(artifactsDir string) error {
