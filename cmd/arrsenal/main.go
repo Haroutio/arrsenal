@@ -65,6 +65,10 @@ type options struct {
 
 	downloadsRoot   string
 	jellyfinHostNet bool
+
+	vpnProvider  string
+	vpnKey       string
+	vpnCountries string
 }
 
 // parseFlags returns nil when the invocation was informational (--version).
@@ -92,6 +96,9 @@ func parseFlags(args []string, out *os.File) *options {
 	fs.BoolVar(&o.purge, "purge", false, "with the uninstall command: also delete app configs, state, and artifacts (typed confirmation required)")
 	fs.StringVar(&o.downloadsRoot, "downloads-root", "", "put the download trees on their own filesystem (blank = under data root, hardlink imports)")
 	fs.BoolVar(&o.jellyfinHostNet, "jellyfin-host-network", false, "run Jellyfin on host networking (DLNA/discovery)")
+	fs.StringVar(&o.vpnProvider, "vpn-provider", "", "route qBittorrent through gluetun with this VPN provider (wireguard)")
+	fs.StringVar(&o.vpnKey, "vpn-wireguard-key", "", "wireguard private key for the VPN (persisted 0600 in the state file)")
+	fs.StringVar(&o.vpnCountries, "vpn-countries", "", "optional comma-separated server countries for the VPN")
 	_ = fs.Parse(args)
 
 	if *showVersion {

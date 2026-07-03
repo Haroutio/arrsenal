@@ -44,12 +44,15 @@ type service struct {
 	ContainerName string            `yaml:"container_name"`
 	Restart       string            `yaml:"restart"`
 	User          string            `yaml:"user,omitempty"`
+	CapAdd        []string          `yaml:"cap_add,omitempty"`
 	NetworkMode   string            `yaml:"network_mode,omitempty"`
 	Networks      []string          `yaml:"networks,omitempty"`
 	Environment   map[string]string `yaml:"environment,omitempty"`
+	EnvFile       []string          `yaml:"env_file,omitempty"`
 	Ports         []portMapping     `yaml:"ports,omitempty"`
 	Volumes       []string          `yaml:"volumes,omitempty"`
 	Devices       []string          `yaml:"devices,omitempty"`
+	DependsOn     []string          `yaml:"depends_on,omitempty"`
 	Deploy        *deploy           `yaml:"deploy,omitempty"`
 }
 
@@ -102,6 +105,9 @@ func Render(s *state.State, statePath string) (Artifacts, error) {
 		app, _ := registry.ByID(id) // state.Validate guarantees existence
 		services[id] = renderService(s, app)
 	}
+	if s.VPNEnabled() {
+		services["gluetun"] = renderGluetun(s)
+	}
 
 	cf := composeFile{
 		Name:     "arrsenal",
@@ -152,11 +158,19 @@ func renderService(s *state.State, app registry.App) service {
 		svc.Environment[app.WebPortEnv] = strconv.Itoa(container)
 	}
 
-	if s.HostNetworked(app.ID) {
+	switch {
+	case app.ID == "qbittorrent" && s.VPNEnabled():
+		// qBittorrent lives inside gluetun's network namespace: every packet
+		// rides the tunnel or nowhere (the kill switch is structural). Its
+		// ports are published BY gluetun; on the bridge it answers at
+		// gluetun:<port> (issue #27).
+		svc.NetworkMode = "service:gluetun"
+		svc.DependsOn = []string{"gluetun"}
+	case s.HostNetworked(app.ID):
 		// Host networking publishes nothing and joins no bridge network;
 		// DLNA/discovery is the point (DESIGN.md §6).
 		svc.NetworkMode = "host"
-	} else {
+	default:
 		svc.Networks = []string{NetworkName}
 		svc.Ports = renderPorts(s, app)
 	}
@@ -245,6 +259,37 @@ func applyGPU(s *state.State, svc *service) {
 	case state.GPUNone:
 		// CPU transcode: nothing to add.
 	}
+}
+
+// renderGluetun is the VPN tunnel (issue #27): NET_ADMIN + /dev/net/tun, the
+// provider via plain env, and the CREDENTIALS via a separate 0600 env-file
+// under gluetun's appdata — never in the world-readable artifacts. It
+// publishes qBittorrent's web port on the tunnel container.
+func renderGluetun(s *state.State) service {
+	env := map[string]string{
+		"TZ":                   "${TZ}",
+		"VPN_SERVICE_PROVIDER": s.VPN.Provider,
+		"VPN_TYPE":             "wireguard",
+	}
+	if s.VPN.Countries != "" {
+		env["SERVER_COUNTRIES"] = s.VPN.Countries
+	}
+	svc := service{
+		Image:         "qmcgaw/gluetun:latest",
+		ContainerName: "gluetun",
+		Restart:       "unless-stopped",
+		CapAdd:        []string{"NET_ADMIN"},
+		Devices:       []string{"/dev/net/tun:/dev/net/tun"},
+		Networks:      []string{NetworkName},
+		Environment:   env,
+		EnvFile:       []string{"${APPDATA}/gluetun/credentials.env"},
+		Volumes:       []string{"${APPDATA}/gluetun:/gluetun"},
+	}
+	if qb, ok := registry.ByID("qbittorrent"); ok {
+		host, container := s.WebPorts(qb)
+		svc.Ports = []portMapping{portMapping(fmt.Sprintf("%d:%d", host, container))}
+	}
+	return svc
 }
 
 // envBody renders .env in fixed order. Values the containers consume come

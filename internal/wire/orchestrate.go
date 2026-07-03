@@ -28,6 +28,9 @@ type Spec struct {
 	// QBitContainerPort is the effective in-container web port (it follows
 	// host remaps — state.WebPorts).
 	QBitContainerPort int
+	// QBitHost is qBittorrent's name on the bridge: "qbittorrent" normally,
+	// "gluetun" when the VPN owns its network namespace (issue #27).
+	QBitHost string
 
 	KeyTimeout time.Duration // how long to wait for each app's key
 }
@@ -38,6 +41,9 @@ type Spec struct {
 func Orchestrate(ctx context.Context, spec Spec) []Result {
 	if spec.KeyTimeout == 0 {
 		spec.KeyTimeout = 2 * time.Minute
+	}
+	if spec.QBitHost == "" {
+		spec.QBitHost = "qbittorrent"
 	}
 	sel := map[string]registry.App{}
 	for _, a := range spec.Apps {
@@ -132,7 +138,7 @@ func Orchestrate(ctx context.Context, spec Spec) []Result {
 		if qbitSelected && spec.QBitPass != "" {
 			results = append(results, EnsureDownloadClient(ctx, c, DownloadClientTarget{
 				ArrName: a.Name, ClientName: "qBittorrent", Implementation: "QBittorrent",
-				Host: "qbittorrent", Port: spec.QBitContainerPort, Category: a.MediaDir,
+				Host: spec.QBitHost, Port: spec.QBitContainerPort, Category: a.MediaDir,
 				Username: "admin", Password: spec.QBitPass,
 			}))
 		}
@@ -178,13 +184,17 @@ func Orchestrate(ctx context.Context, spec Spec) []Result {
 		var inputs []HomepageInput
 		for _, a := range spec.Apps {
 			widgetPort := 0
+			widgetHost := ""
 			if a.ID == "qbittorrent" {
 				widgetPort = spec.QBitContainerPort
+				if spec.QBitHost != "qbittorrent" {
+					widgetHost = spec.QBitHost
+				}
 			}
 			inputs = append(inputs, HomepageInput{
 				App: a, HostURL: spec.Access(a.ID), Key: keys[a.ID],
 				Username: "admin", Password: qbitPassFor(a.ID, spec.QBitPass),
-				WidgetPort: widgetPort,
+				WidgetPort: widgetPort, WidgetHost: widgetHost,
 			})
 		}
 		results = append(results, WriteTailConfig(
