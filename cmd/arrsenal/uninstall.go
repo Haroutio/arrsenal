@@ -46,6 +46,9 @@ func runUninstall(o options, purge bool) error {
 		for _, id := range s.Apps {
 			fmt.Printf("  %s\n", filepath.Join(s.AppdataRoot, id))
 		}
+		if s.TRaSH.Enabled {
+			fmt.Printf("  %s\n", filepath.Join(s.AppdataRoot, "recyclarr"))
+		}
 		fmt.Printf("  %s\n", o.statePath)
 		fmt.Printf("  %s/docker-compose.yml + .env\n", o.artifactsDir)
 		fmt.Println("Media under the data root was never touched.")
@@ -59,6 +62,12 @@ func runUninstall(o options, purge bool) error {
 	var doomed []string
 	for _, id := range s.Apps {
 		doomed = append(doomed, filepath.Join(s.AppdataRoot, id))
+	}
+	if s.TRaSH.Enabled {
+		// Arrsenal-managed like any app dir, and it holds the arrs' API
+		// keys in recyclarr.yml — a purge that leaves it behind breaks the
+		// "deletes exactly the managed scope" promise (audit finding).
+		doomed = append(doomed, filepath.Join(s.AppdataRoot, "recyclarr"))
 	}
 	doomed = append(doomed,
 		o.statePath,

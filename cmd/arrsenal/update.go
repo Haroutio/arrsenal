@@ -39,6 +39,13 @@ func runUpdate(o options) error {
 			fmt.Println(" ", line)
 		}
 	}
+	if s.TRaSH.Enabled {
+		// Recyclarr is a one-shot container, not a compose service, so the
+		// pull above never covers it (audit finding).
+		if err := docker.PullImage(recyclarrImage); err != nil {
+			return err
+		}
+	}
 
 	fmt.Println("reconciling containers…")
 	if err := docker.Up(o.artifactsDir); err != nil {

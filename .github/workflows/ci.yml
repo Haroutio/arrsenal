@@ -109,18 +109,6 @@ jobs:
           grep -qE '^complete_dir = /data/usenet/complete' /tmp/arrtest/appdata/sabnzbd/sabnzbd.ini
           assert_json http://localhost:8989/api/v3/qualityprofile "X-Api-Key: $SONK" \
             '.[] | select(.name=="WEB-1080p")' "TRaSH WEB-1080p quality profile synced into sonarr"
-      # Recyclarr is our one integration whose data source lives outside this
-      # repo (the TRaSH guides); when it breaks, the report tail is rarely
-      # enough — surface its own debug log.
-      - name: debug — recyclarr autopsy on failure
-        if: failure()
-        run: |
-          echo "=== generated config (keys redacted) ==="
-          sed -E 's/api_key:.*/api_key: REDACTED/' /tmp/arrtest/appdata/recyclarr/recyclarr.yml || true
-          echo "=== recyclarr version ==="
-          docker run --rm ghcr.io/recyclarr/recyclarr:8 --version || true
-          echo "=== debug log from the failing product-run sync ==="
-          sed -E 's/[Aa]pi[_-]?[Kk]ey[^,}]*/api_key REDACTED/g' /tmp/arrtest/appdata/recyclarr/logs/cli/*.debug.log || true
       - name: re-run is idempotent — everything comes back existed, nothing re-wired
         run: |
           ./arrsenal --yes --gpu none --admin-user ci --admin-pass ci-wiring-pass \
@@ -167,9 +155,23 @@ jobs:
           echo "purge" | ./arrsenal uninstall --purge \
             --state /tmp/arrtest/arrsenal.yaml --artifacts-dir /tmp/arrtest
           if [ -d /tmp/arrtest/appdata/sonarr ]; then echo "purge left app config" && exit 1; fi
+          if [ -d /tmp/arrtest/appdata/recyclarr ]; then echo "purge left recyclarr config (holds the arr API keys)" && exit 1; fi
           if [ -f /tmp/arrtest/arrsenal.yaml ]; then echo "purge left state" && exit 1; fi
           test -f /tmp/arrtest/appdata/NOT-ARRSENALS.txt || (echo "purge overreached beyond managed apps!" && exit 1)
           test -d /tmp/arrtest/data/media || (echo "purge touched the data root!" && exit 1)
+      # Recyclarr is our one integration whose data source lives outside this
+      # repo (the TRaSH guides); when it breaks, the report tail is rarely
+      # enough — surface its own debug log. Placed last so it fires no matter
+      # which step the sync failed in (the re-run and deselect steps sync too).
+      - name: debug — recyclarr autopsy on failure
+        if: failure()
+        run: |
+          echo "=== generated config (keys redacted) ==="
+          sed -E 's/api_key:.*/api_key: REDACTED/' /tmp/arrtest/appdata/recyclarr/recyclarr.yml || true
+          echo "=== recyclarr version ==="
+          docker run --rm ghcr.io/recyclarr/recyclarr:8 --version || true
+          echo "=== debug logs, all syncs (keys redacted) ==="
+          sed -E 's/[Aa]pi[_-]?[Kk]ey[^,}]*/api_key REDACTED/g' /tmp/arrtest/appdata/recyclarr/logs/cli/*.debug.log || true
       - name: teardown
         if: always()
         run: cd /tmp/arrtest 2>/dev/null && docker compose down --remove-orphans || true

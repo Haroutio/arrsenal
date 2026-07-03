@@ -546,11 +546,8 @@ func buildSpec(s *state.State, o options, adopted map[string]bool) wire.Spec {
 		runRecyclarr = func() (string, error) {
 			// Recyclarr's image runs unprivileged; hand it the config dir.
 			chownTree(recyclarrDir, puid, pgid)
-			// Pinned to the major: the generated config speaks the v8
-			// schema, so a future v9 must be a deliberate upgrade here —
-			// not a surprise breakage (v8 itself broke v7's includes).
 			return dockerx.New().RunOneShot(
-				"ghcr.io/recyclarr/recyclarr:8",
+				recyclarrImage,
 				generate.NetworkName,
 				fmt.Sprintf("%d:%d", puid, pgid),
 				[]string{recyclarrDir + ":/config"},
@@ -584,15 +581,23 @@ func buildSpec(s *state.State, o options, adopted map[string]bool) wire.Spec {
 	}
 }
 
+// recyclarrImage is pinned to the major: the generated config speaks the v8
+// schema, so a future v9 must be a deliberate upgrade — not a surprise
+// breakage (v8 itself broke v7's includes). `arrsenal update` re-pulls it.
+const recyclarrImage = "ghcr.io/recyclarr/recyclarr:8"
+
 // chownTree hands a directory tree to the container user (POSIX only; the
 // dev platform no-ops). Best effort — the sync surfaces any real problem.
+// Lchown, never Chown: this tree is writable by the container user and this
+// walk runs as root, so following a planted symlink would re-own arbitrary
+// host files (audit finding).
 func chownTree(root string, uid, gid int) {
 	if runtime.GOOS == "windows" {
 		return
 	}
 	_ = filepath.Walk(root, func(path string, _ os.FileInfo, err error) error {
 		if err == nil {
-			_ = os.Chown(path, uid, gid)
+			_ = os.Lchown(path, uid, gid)
 		}
 		return nil
 	})

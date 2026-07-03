@@ -83,6 +83,17 @@ func (d *Docker) Pull(artifactsDir string) (string, error) {
 	return out, nil
 }
 
+// PullImage refreshes one image by ref. The one-shot containers (Recyclarr)
+// aren't compose services, so compose pull never covers them; without this,
+// `arrsenal update` would leave a box pinned forever to whichever digest its
+// first run pulled (audit finding).
+func (d *Docker) PullImage(image string) error {
+	if _, err := d.run("pull", image); err != nil {
+		return fmt.Errorf("pulling %s: %w", image, err)
+	}
+	return nil
+}
+
 // ValidateCompose asks compose itself whether the generated artifacts parse —
 // the authoritative answer, from the same binary that will run them.
 func (d *Docker) ValidateCompose(artifactsDir string) error {
