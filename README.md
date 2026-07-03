@@ -29,7 +29,10 @@ The v0.1 menu — pick any subset:
 
 | App | Role |
 |---|---|
-| [Jellyfin](https://jellyfin.org) | Media server (free hardware transcoding) |
+| [Jellyfin](https://jellyfin.org) | Media server (free hardware transcoding) — the flagship path |
+| [Plex](https://plex.tv) | Media server (hardware transcoding needs Plex Pass) |
+| [Emby](https://emby.media) | Media server (hardware transcoding needs Emby Premiere) |
+| [Overseerr](https://overseerr.dev) | Requests for Plex |
 | [Jellyseerr](https://github.com/fallenbagel/jellyseerr) | Requests |
 | [Prowlarr](https://prowlarr.com) | Indexer manager |
 | [Sonarr](https://sonarr.tv) | TV |
@@ -40,15 +43,17 @@ The v0.1 menu — pick any subset:
 | [qBittorrent](https://www.qbittorrent.org) | Torrent download client |
 | [Homepage](https://gethomepage.dev) | Dashboard (widgets pre-wired in v0.2) |
 
-Plex and Emby arrive in v0.3 — Plex paired with Overseerr, Emby with Jellyseerr —
-including honest warnings that their hardware transcoding sits behind Plex Pass /
-Emby Premiere. Jellyfin's does not; that's why it's the flagship path.
+Pairing guidance: Plex → Overseerr, Jellyfin/Emby → Jellyseerr. The paid-transcode
+warnings appear right on the selection screen — Jellyfin's hardware transcoding is
+free, which is why it's the flagship. Optionally: route qBittorrent through a
+**gluetun VPN tunnel** (WireGuard; the kill switch is structural), and put downloads
+on a **separate disk** from the media library (SSD scratch + big array).
 
 ## Install
 
 ```bash
 # Release-pinned, checksum-verified:
-curl -fsSL https://raw.githubusercontent.com/Haroutio/arrsenal/v0.2.0/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Haroutio/arrsenal/v0.3.0/install.sh | bash
 ```
 
 The bootstrap script detects your distro, offers to install Docker if it's missing
@@ -58,7 +63,7 @@ your architecture, verifies its SHA-256 checksum, and hands over to the TUI.
 Prefer to read before you run? Good instinct:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Haroutio/arrsenal/v0.2.0/install.sh -o install.sh
+curl -fsSL https://raw.githubusercontent.com/Haroutio/arrsenal/v0.3.0/install.sh -o install.sh
 less install.sh
 bash install.sh
 ```
@@ -121,7 +126,8 @@ Wiring report:
 |---|---|---|
 | v0.1 | It installs: TUI, preflight, generation, `up -d` | ✅ |
 | v0.2 | The killer feature: full API auto-wiring | ✅ |
-| v0.3 | Media-server choice (Plex/Emby), VPN, update/uninstall, flexible storage, TRaSH quality profiles | next |
+| v0.3 | Media-server choice (Plex/Emby), VPN, `update`/`uninstall`, split storage, headless | ✅ |
+| v0.4 | Quality: TRaSH-guide profiles via Recyclarr, from a TUI picker | next |
 | v1.0 | Stable: docs, hardening, schema stability | |
 
 Full architecture and every design decision (with reasoning): [docs/DESIGN.md](docs/DESIGN.md).
