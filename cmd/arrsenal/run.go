@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	"github.com/Haroutio/arrsenal/internal/dockerx"
 	"github.com/Haroutio/arrsenal/internal/generate"
 	"github.com/Haroutio/arrsenal/internal/preflight"
+	"github.com/Haroutio/arrsenal/internal/registry"
 	"github.com/Haroutio/arrsenal/internal/state"
 	"github.com/Haroutio/arrsenal/internal/tui"
 )
@@ -29,7 +31,7 @@ func run(o options) error {
 		if err := headlessFill(s, o); err != nil {
 			return err
 		}
-	} else if err := interactiveFill(s, o); err != nil { // o reserved for future interactive knobs
+	} else if err := interactiveFill(s, o); err != nil {
 		return err
 	}
 
@@ -92,7 +94,7 @@ func headlessFill(s *state.State, o options) error {
 }
 
 // interactiveFill drives the TUI screens in order, writing into the state.
-func interactiveFill(s *state.State, _ options) error {
+func interactiveFill(s *state.State, o options) error {
 	// 1. App selection.
 	sel := tui.NewSelect(s.Apps)
 	if err := runScreen(&selectAdapter{&sel}); err != nil {
@@ -130,20 +132,49 @@ func interactiveFill(s *state.State, _ options) error {
 	}
 	paths.Apply(s)
 
-	// 4. GPU: detection proposes, the user disposes.
-	det := preflight.DetectGPU(preflight.DefaultGPUProbes())
-	fmt.Println(det.Detail)
-	if det.ToolkitInstallHint != "" {
-		fmt.Println(det.ToolkitInstallHint)
-		fmt.Print(preflight.FormatToolkitPlan())
-	}
-	if det.Proposal != state.GPUNone && confirm(fmt.Sprintf("Use the detected GPU (%s)?", det.Proposal), true) {
-		s.GPU = det.Proposal
+	// 4. GPU: an explicit --gpu flag outranks detection entirely; otherwise
+	// detection proposes and the user disposes — including a manual pick
+	// when the probes miss hardware the machine's owner knows is there.
+	if o.gpu != "" {
+		fmt.Printf("gpu: %s (set by --gpu)\n", s.GPU)
 	} else {
-		s.GPU = state.GPUNone
+		det := preflight.DetectGPU(preflight.DefaultGPUProbes())
+		fmt.Println(det.Detail)
+		if det.ToolkitInstallHint != "" {
+			fmt.Println(det.ToolkitInstallHint)
+			fmt.Print(preflight.FormatToolkitPlan())
+		}
+		if det.Proposal != state.GPUNone && confirm(fmt.Sprintf("Use the detected GPU (%s)?", det.Proposal), true) {
+			s.GPU = det.Proposal
+		} else {
+			s.GPU = askGPU()
+		}
 	}
 
 	return s.Validate()
+}
+
+// askGPU is the manual override: detection is a convenience, never a wall.
+func askGPU() state.GPUMode {
+	fmt.Print("GPU mode — none, nvidia, intel (QuickSync), amd (VAAPI) [none]: ")
+	line, err := bufio.NewReader(os.Stdin).ReadString('\n')
+	if err != nil {
+		return state.GPUNone
+	}
+	return parseGPUAnswer(line)
+}
+
+func parseGPUAnswer(line string) state.GPUMode {
+	switch strings.ToLower(strings.TrimSpace(line)) {
+	case "nvidia":
+		return state.GPUNvidia
+	case "intel":
+		return state.GPUIntel
+	case "amd":
+		return state.GPUAMD
+	default:
+		return state.GPUNone
+	}
 }
 
 // pipeline is the shared back half: scan → tree → checks → render → up.
@@ -244,11 +275,43 @@ func pipeline(s *state.State, o options) error {
 			fmt.Printf("  ✗ %s\n", r.Detail)
 		}
 	}
+	printAccessTable(s)
 	if failed > 0 {
 		return fmt.Errorf("%d of %d containers did not become ready", failed, len(results))
 	}
 	fmt.Println("done — the stack is up. Re-run arrsenal any time to add or remove apps.")
 	return nil
+}
+
+// printAccessTable is the payoff moment: where everything lives, as URLs.
+func printAccessTable(s *state.State) {
+	host := lanIP()
+	fmt.Println("\nYour stack:")
+	for _, id := range s.Apps {
+		app, ok := registry.ByID(id)
+		if !ok {
+			continue
+		}
+		port := s.WebHostPort(app)
+		if s.HostNetworked(id) {
+			port = app.Web.Container // host networking binds the native port
+		}
+		fmt.Printf("  %-12s http://%s:%d\n", app.Name, host, port)
+	}
+}
+
+// lanIP finds the address neighbors reach this box on — best effort, no
+// packets sent (UDP "dial" only selects a route).
+func lanIP() string {
+	conn, err := net.Dial("udp4", "192.0.2.1:9") // TEST-NET; never contacted
+	if err != nil {
+		if h, herr := os.Hostname(); herr == nil {
+			return h
+		}
+		return "localhost"
+	}
+	defer func() { _ = conn.Close() }()
+	return conn.LocalAddr().(*net.UDPAddr).IP.String()
 }
 
 // confirm asks on the terminal; def is the answer for a bare enter.
