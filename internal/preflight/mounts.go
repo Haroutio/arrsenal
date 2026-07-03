@@ -42,6 +42,16 @@ func ListMounts() ([]MountInfo, error) {
 	}
 	defer func() { _ = f.Close() }()
 	mounts := parseMounts(f)
+	// Bind-mounted FILES (docker's /etc/resolv.conf and friends) parse as
+	// mounts but can never hold a library — the splash once proudly offered
+	// resolv.conf as the storage recommendation inside a container.
+	kept := mounts[:0]
+	for _, m := range mounts {
+		if info, err := os.Stat(m.Target); err == nil && info.IsDir() {
+			kept = append(kept, m)
+		}
+	}
+	mounts = kept
 	for i := range mounts {
 		mounts[i].FreeBytes, mounts[i].TotalBytes = fsSpace(mounts[i].Target)
 	}
