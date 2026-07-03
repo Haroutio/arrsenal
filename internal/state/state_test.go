@@ -391,6 +391,34 @@ gpu: none
 	}
 }
 
+func TestTRaSHValidation(t *testing.T) {
+	s := full() // has sonarr + radarr
+	s.TRaSH = TRaSH{Enabled: true, Resolution: "1080p", Source: "bluray-web", Anime: true}
+	if err := s.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	s.TRaSH.Resolution = "480i"
+	if err := s.Validate(); err == nil {
+		t.Fatal("bad resolution must be rejected")
+	}
+	s.TRaSH = TRaSH{Enabled: true, Resolution: "1080p", Source: "bluray-web"}
+	s.Apps = []string{"jellyfin"} // no arrs
+	if err := s.Validate(); err == nil {
+		t.Fatal("trash without an eligible arr must be rejected")
+	}
+	// Round-trips.
+	s = full()
+	s.TRaSH = TRaSH{Enabled: true, Resolution: "2160p", Source: "remux"}
+	p := filepath.Join(t.TempDir(), "arrsenal.yaml")
+	if err := s.Save(p); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := Load(p)
+	if err != nil || !loaded.TRaSH.Enabled || loaded.TRaSH.Resolution != "2160p" {
+		t.Fatalf("round-trip: %+v %v", loaded.TRaSH, err)
+	}
+}
+
 func TestSaveRefusesInvalidState(t *testing.T) {
 	s := full()
 	s.GPU = "voodoo2"
