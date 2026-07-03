@@ -281,9 +281,12 @@ func runTRaSH(spec Spec, keys map[string]string) []Result {
 		out = strings.ReplaceAll(out, k, "[redacted]")
 	}
 	if err != nil {
+		// A failed sync's tail is the user's only diagnostic; Recyclarr's
+		// fatal line often trails a longer root cause (e.g. a repo-clone
+		// error), so keep enough of it.
 		tail := out
-		if len(tail) > 600 {
-			tail = tail[len(tail)-600:]
+		if len(tail) > 2000 {
+			tail = tail[len(tail)-2000:]
 		}
 		return []Result{{Connection: conn, Outcome: OutcomeFailed,
 			Detail: fmt.Sprintf("recyclarr sync failed: %v\n%s", err, tail)}}

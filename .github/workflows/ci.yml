@@ -109,6 +109,19 @@ jobs:
           grep -qE '^complete_dir = /data/usenet/complete' /tmp/arrtest/appdata/sabnzbd/sabnzbd.ini
           assert_json http://localhost:8989/api/v3/qualityprofile "X-Api-Key: $SONK" \
             '.[] | select(.name=="WEB-1080p")' "TRaSH WEB-1080p quality profile synced into sonarr"
+      - name: debug — full recyclarr picture on failure
+        if: failure()
+        run: |
+          echo "=== generated config (keys redacted) ==="
+          sed -E 's/api_key:.*/api_key: REDACTED/' /tmp/arrtest/appdata/recyclarr/recyclarr.yml || true
+          echo "=== /config ownership and contents ==="
+          ls -laR /tmp/arrtest/appdata/recyclarr | head -60
+          echo "=== egress from the arrsenal network ==="
+          docker run --rm --network arrsenal alpine wget -qO- https://api.github.com/zen || echo "NO EGRESS"
+          echo "=== manual sync, full debug output ==="
+          docker run --rm --network arrsenal --user "$(id -u):$(id -g)" \
+            -v /tmp/arrtest/appdata/recyclarr:/config \
+            ghcr.io/recyclarr/recyclarr:latest sync --debug || true
       - name: re-run is idempotent — everything comes back existed, nothing re-wired
         run: |
           ./arrsenal --yes --gpu none --admin-user ci --admin-pass ci-wiring-pass \
