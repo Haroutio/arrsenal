@@ -546,8 +546,11 @@ func buildSpec(s *state.State, o options, adopted map[string]bool) wire.Spec {
 		runRecyclarr = func() (string, error) {
 			// Recyclarr's image runs unprivileged; hand it the config dir.
 			chownTree(recyclarrDir, puid, pgid)
+			// Pinned to the major: the generated config speaks the v8
+			// schema, so a future v9 must be a deliberate upgrade here —
+			// not a surprise breakage (v8 itself broke v7's includes).
 			return dockerx.New().RunOneShot(
-				"ghcr.io/recyclarr/recyclarr:latest",
+				"ghcr.io/recyclarr/recyclarr:8",
 				generate.NetworkName,
 				fmt.Sprintf("%d:%d", puid, pgid),
 				[]string{recyclarrDir + ":/config"},
