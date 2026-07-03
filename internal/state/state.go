@@ -322,6 +322,11 @@ func (s *State) Validate() error {
 	seen := map[string]bool{}
 	for _, id := range s.Apps {
 		if _, ok := registry.ByID(id); !ok {
+			// The schema promise: a state from any released version loads,
+			// or fails with instructions. Removed apps take the second path.
+			if hint, removed := removedApps[id]; removed {
+				return fmt.Errorf("app %q was removed: %s", id, hint)
+			}
 			return fmt.Errorf("unknown app %q (registry knows: %s)", id, strings.Join(registryIDs(), ", "))
 		}
 		if seen[id] {
@@ -443,4 +448,13 @@ func registryIDs() []string {
 		ids = append(ids, a.ID)
 	}
 	return ids
+}
+
+// removedApps maps IDs that once shipped to the instruction that replaces
+// them. Deleting an app from the registry without an entry here would brick
+// every state file that selected it.
+var removedApps = map[string]string{
+	"overseerr": "Overseerr merged into Seerr upstream — edit this state file and replace overseerr with jellyseerr " +
+		"(shown as Seerr; serves Plex too). Your Overseerr config, if any, stays untouched in appdata; " +
+		"Seerr's migration guide covers importing it: https://docs.seerr.dev",
 }

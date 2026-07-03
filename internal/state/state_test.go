@@ -476,3 +476,32 @@ func lookApp(t *testing.T, id string) (registry.App, bool) {
 	}
 	return a, true
 }
+
+// The schema promise applied to app REMOVAL: a state file from a version
+// that shipped Overseerr must fail with replacement instructions, never a
+// bare "unknown app".
+func TestRemovedAppFailsWithInstructions(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "arrsenal.yaml")
+	old := `version: 4
+apps: [jellyfin, overseerr, sonarr]
+puid: 1000
+pgid: 1000
+tz: Etc/UTC
+umask: "002"
+data_root: /data
+appdata_root: /opt/appdata
+gpu: none
+`
+	if err := os.WriteFile(p, []byte(old), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Load(p)
+	if err == nil {
+		t.Fatal("a state selecting a removed app must not load silently")
+	}
+	for _, want := range []string{"overseerr", "Seerr", "jellyseerr"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("removal error must mention %q:\n%v", want, err)
+		}
+	}
+}

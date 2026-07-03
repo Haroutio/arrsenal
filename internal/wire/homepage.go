@@ -15,7 +15,6 @@ var homepageMeta = map[string]struct {
 	"jellyfin":    {"Media", "jellyfin.png", "jellyfin"},
 	"plex":        {"Media", "plex.png", ""}, // plex widget needs a Plex token — tile only
 	"emby":        {"Media", "emby.png", ""},
-	"overseerr":   {"Media", "overseerr.png", ""}, // widget needs its API key (post-wizard) — tile only
 	"jellyseerr":  {"Media", "jellyseerr.png", "jellyseerr"},
 	"prowlarr":    {"Management", "prowlarr.png", "prowlarr"},
 	"sonarr":      {"Management", "sonarr.png", "sonarr"},

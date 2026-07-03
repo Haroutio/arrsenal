@@ -103,27 +103,6 @@ var apps = []App{
 		BootPhase:  BootCore,
 	},
 	{
-		ID:          "overseerr",
-		Name:        "Overseerr",
-		Description: "Requests for Plex — superseded upstream: Seerr now serves Plex too",
-		Role:        RoleRequests,
-		Image:       "lscr.io/linuxserver/overseerr",
-		Tag:         "latest",
-		Identity:    IdentityEnvPUIDGID,
-		// Container 5055 like Jellyseerr; host defaults to 5056 so both
-		// request apps can coexist.
-		Web: PortMap{Container: 5055, Host: 5056, Protocol: "tcp", Purpose: "web UI"},
-		Mounts: []Mount{
-			{Kind: SourceAppdata, Target: "/config"},
-		},
-		WiringTier: WiringManual, // setup wizard requires a Plex browser login
-		BootPhase:  BootCore,
-		Warnings: []string{
-			"Setup requires signing in with your Plex account (browser) — cannot be automated",
-			"Overseerr merged into Seerr upstream — pick Seerr unless you specifically want this",
-		},
-	},
-	{
 		ID:          "prowlarr",
 		Name:        "Prowlarr",
 		Description: "Indexer manager — add indexers once, every arr gets them",

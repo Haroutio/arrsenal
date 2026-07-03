@@ -178,7 +178,6 @@ func Orchestrate(ctx context.Context, spec Spec) []Result {
 	manualNotes := []struct{ id, note string }{
 		{"plex", "finish setup in Plex's web UI (claim the server if you skipped the token, add libraries pointing at /media)"},
 		{"emby", "finish Emby's setup wizard (add libraries pointing at /media; hardware transcoding needs Emby Premiere)"},
-		{"overseerr", "finish Overseerr's wizard — sign in with your Plex account and connect your arrs"},
 	}
 	for _, m := range manualNotes {
 		id, note := m.id, m.note

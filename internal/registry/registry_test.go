@@ -12,9 +12,12 @@ func TestRegistryIsValid(t *testing.T) {
 }
 
 func TestMenuIsExactlyTheAgreedSet(t *testing.T) {
-	// v0.1's ten plus v0.3's media-server choice (#26): Plex, Emby, Overseerr.
+	// v0.1's ten plus v0.3's media-server choice (#26): Plex and Emby.
+	// Overseerr was REMOVED post-v0.5.2: upstream merged it into Seerr, so
+	// shipping both meant offering a dead app (state files that still say
+	// overseerr fail with replacement instructions — see state.removedApps).
 	want := []string{
-		"jellyfin", "plex", "emby", "jellyseerr", "overseerr",
+		"jellyfin", "plex", "emby", "jellyseerr",
 		"prowlarr", "sonarr", "radarr",
 		"lidarr", "bazarr", "sabnzbd", "qbittorrent", "homepage",
 	}
@@ -56,8 +59,8 @@ func TestRoleQueries(t *testing.T) {
 		t.Fatalf("media servers = %+v, want jellyfin (flagship, first), plex, emby", ms)
 	}
 	req := ByRole(RoleRequests)
-	if len(req) != 2 {
-		t.Fatalf("requests apps = %+v, want jellyseerr + overseerr", req)
+	if len(req) != 1 || req[0].ID != "jellyseerr" {
+		t.Fatalf("requests apps = %+v, want exactly Seerr", req)
 	}
 	// The paywall honesty contract (#26): paid-transcode servers must say so
 	// at selection time.
