@@ -20,6 +20,11 @@ type Spec struct {
 	Apps        []registry.App  // selected, registry order
 	Adopted     map[string]bool // app ID → appdata predated this run
 	AppdataRoot string
+	// PUID/PGID own the tail configs this pass writes: root-owned 0600
+	// files are invisible to the container users that must read them
+	// (Homepage rendered a red parse error instead of a dashboard — field
+	// report).
+	PUID, PGID int
 
 	AdminUser string // may be empty → auth + Jellyfin wizard become manual steps
 	AdminPass string
@@ -151,7 +156,8 @@ func Orchestrate(ctx context.Context, spec Spec) []Result {
 		results = append(results, EnsureRootFolder(ctx, c, a.APIBase, a.Name, "/data/media/"+a.MediaDir))
 	}
 
-	// 5. Jellyfin lane.
+	// 5. Jellyfin lane. Its minted API key feeds the dashboard widget below.
+	jellyfinKey := ""
 	if _, ok := sel["jellyfin"]; ok {
 		if spec.AdminPass == "" {
 			results = append(results, Result{
@@ -159,7 +165,7 @@ func Orchestrate(ctx context.Context, spec Spec) []Result {
 				Detail:      "no admin credential provided — finish Jellyfin's wizard in its web UI",
 				FallbackURL: spec.Access("jellyfin")})
 		} else {
-			results = append(results, EnsureJellyfin(ctx, JellyfinTarget{
+			jfResults, jfKey := EnsureJellyfin(ctx, JellyfinTarget{
 				URL: spec.Access("jellyfin"), AdminUser: spec.AdminUser, AdminPass: spec.AdminPass,
 				HWAccel: spec.HWAccel, TranscodePath: transcodePathFor(spec.HWAccel),
 				Libraries: []JellyfinLibrary{
@@ -167,7 +173,9 @@ func Orchestrate(ctx context.Context, spec Spec) []Result {
 					{Name: "Shows", CollectionType: "tvshows", Path: "/media/tv"},
 					{Name: "Music", CollectionType: "music", Path: "/media/music"},
 				},
-			})...)
+			})
+			results = append(results, jfResults...)
+			jellyfinKey = jfKey
 		}
 	}
 
@@ -206,7 +214,7 @@ func Orchestrate(ctx context.Context, spec Spec) []Result {
 		}
 		results = append(results, WriteTailConfig(
 			filepath.Join(spec.AppdataRoot, "bazarr", "config", "config.yaml"),
-			BazarrConfig(sonarr, radarr), 0o600, "Bazarr ← sonarr/radarr connections"))
+			BazarrConfig(sonarr, radarr), 0o600, spec.PUID, spec.PGID, "Bazarr ← sonarr/radarr connections"))
 	}
 	if _, ok := sel["homepage"]; ok {
 		var inputs []HomepageInput
@@ -219,15 +227,19 @@ func Orchestrate(ctx context.Context, spec Spec) []Result {
 					widgetHost = spec.QBitHost
 				}
 			}
+			key := keys[a.ID]
+			if a.ID == "jellyfin" {
+				key = jellyfinKey
+			}
 			inputs = append(inputs, HomepageInput{
-				App: a, HostURL: spec.Access(a.ID), Key: keys[a.ID],
+				App: a, HostURL: spec.Access(a.ID), Key: key,
 				Username: "admin", Password: qbitPassFor(a.ID, spec.QBitPass),
 				WidgetPort: widgetPort, WidgetHost: widgetHost,
 			})
 		}
 		results = append(results, WriteTailConfig(
 			filepath.Join(spec.AppdataRoot, "homepage", "services.yaml"),
-			HomepageServices(BuildHomepageServices(inputs)), 0o600, "Homepage ← service widgets"))
+			HomepageServices(BuildHomepageServices(inputs)), 0o600, spec.PUID, spec.PGID, "Homepage ← service widgets"))
 	}
 
 	// 6.5 TRaSH quality sync (issue #60): a CONVERGENT step — Recyclarr

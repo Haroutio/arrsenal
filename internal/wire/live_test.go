@@ -85,7 +85,7 @@ func TestLiveJellyfin(t *testing.T) {
 	if adoptedURL != "" {
 		// The user's real server: wizard long done → exactly one Existed,
 		// nothing touched.
-		results := EnsureJellyfin(ctx, JellyfinTarget{URL: adoptedURL, AdminUser: "x", AdminPass: "x"})
+		results, _ := EnsureJellyfin(ctx, JellyfinTarget{URL: adoptedURL, AdminUser: "x", AdminPass: "x"})
 		t.Logf("adopted: %+v", results)
 		if len(results) != 1 || results[0].Outcome != OutcomeExisted {
 			t.Fatalf("adopted server must be a single Existed: %+v", results)
@@ -100,7 +100,7 @@ func TestLiveJellyfin(t *testing.T) {
 				{Name: "Shows", CollectionType: "tvshows", Path: "/media/tv"},
 			},
 		}
-		results := EnsureJellyfin(ctx, target)
+		results, _ := EnsureJellyfin(ctx, target)
 		for _, r := range results {
 			t.Logf("fresh: %s → %s %s", r.Connection, r.Outcome, r.Detail)
 			if r.Outcome == OutcomeFailed {

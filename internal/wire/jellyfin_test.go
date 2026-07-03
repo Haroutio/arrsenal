@@ -3,6 +3,7 @@ package wire
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -18,6 +19,7 @@ type fakeJellyfin struct {
 	adminPass  string
 	encoding   map[string]any
 	libraries  []map[string]any
+	apiKeys    []string
 }
 
 func (f *fakeJellyfin) server() *httptest.Server {
@@ -65,6 +67,20 @@ func (f *fakeJellyfin) server() *httptest.Server {
 		}
 		_ = json.NewEncoder(w).Encode(f.libraries)
 	})
+	mux.HandleFunc("/Auth/Keys", func(w http.ResponseWriter, r *http.Request) {
+		record(r)
+		if r.Method == http.MethodPost {
+			f.apiKeys = append(f.apiKeys, r.URL.Query().Get("App"))
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		type item struct{ AccessToken, AppName string }
+		items := []item{}
+		for i, app := range f.apiKeys {
+			items = append(items, item{AccessToken: fmt.Sprintf("jf-api-key-%d", i), AppName: app})
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"Items": items})
+	})
 	mux.HandleFunc("/System/Configuration/encoding", func(w http.ResponseWriter, r *http.Request) {
 		record(r)
 		if r.Method == http.MethodPost {
@@ -96,9 +112,15 @@ func TestJellyfinFreshRunsTheWholeLane(t *testing.T) {
 	srv := f.server()
 	defer srv.Close()
 
-	results := EnsureJellyfin(context.Background(), jfTarget(srv.URL))
-	if len(results) != 4 { // wizard + 2 libraries + encoder
-		t.Fatalf("want 4 results, got %+v", results)
+	results, apiKey := EnsureJellyfin(context.Background(), jfTarget(srv.URL))
+	if len(results) != 5 { // wizard + 2 libraries + encoder + API key
+		t.Fatalf("want 5 results, got %+v", results)
+	}
+	if apiKey != "jf-api-key-0" {
+		t.Fatalf("the dashboard widget key must come back, got %q", apiKey)
+	}
+	if len(f.apiKeys) != 1 {
+		t.Fatalf("exactly one key created, got %v", f.apiKeys)
 	}
 	for _, r := range results {
 		if r.Outcome != OutcomeWired {
@@ -129,7 +151,7 @@ func TestJellyfinAdoptedIsLeftEntirelyAlone(t *testing.T) {
 	srv := f.server()
 	defer srv.Close()
 
-	results := EnsureJellyfin(context.Background(), jfTarget(srv.URL))
+	results, _ := EnsureJellyfin(context.Background(), jfTarget(srv.URL))
 	if len(results) != 1 || results[0].Outcome != OutcomeExisted {
 		t.Fatalf("adopted server: %+v", results)
 	}
@@ -158,7 +180,7 @@ func TestJellyfinAmbiguousStateRefusesTheWizard(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	results := EnsureJellyfin(context.Background(), jfTarget(srv.URL))
+	results, _ := EnsureJellyfin(context.Background(), jfTarget(srv.URL))
 	if len(results) != 1 || results[0].Outcome != OutcomeFailed {
 		t.Fatalf("ambiguous state must fail closed: %+v", results)
 	}
@@ -191,7 +213,7 @@ func TestJellyfinRaceMidWizardReportsAdoptedNotFailed(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	results := EnsureJellyfin(context.Background(), jfTarget(srv.URL))
+	results, _ := EnsureJellyfin(context.Background(), jfTarget(srv.URL))
 	if len(results) != 1 || results[0].Outcome != OutcomeExisted {
 		t.Fatalf("mid-wizard 401 must resolve to Existed: %+v", results)
 	}
@@ -207,7 +229,7 @@ func TestJellyfinCPUModeSkipsEncoder(t *testing.T) {
 
 	target := jfTarget(srv.URL)
 	target.HWAccel, target.TranscodePath = "", ""
-	results := EnsureJellyfin(context.Background(), target)
+	results, _ := EnsureJellyfin(context.Background(), target)
 	for _, r := range results {
 		if strings.Contains(r.Connection, "transcoding") {
 			t.Fatalf("CPU mode must not touch the encoder: %+v", results)
@@ -223,7 +245,7 @@ func TestJellyfinExistingLibraryShortCircuits(t *testing.T) {
 	srv := f.server()
 	defer srv.Close()
 
-	results := EnsureJellyfin(context.Background(), jfTarget(srv.URL))
+	results, _ := EnsureJellyfin(context.Background(), jfTarget(srv.URL))
 	var movies, shows *Result
 	for i := range results {
 		if strings.Contains(results[i].Connection, "Movies") {

@@ -60,7 +60,15 @@ func BuildHomepageServices(inputs []HomepageInput) []HomepageService {
 			Icon:  meta.icon,
 			Href:  in.HostURL,
 		}
-		if known && meta.widget != "" {
+		// A widget without its credential renders a red API error where a
+		// clean tile should be (field report: Jellyseerr pre-wizard, Bazarr
+		// whose key is born after this file is written). No credential →
+		// tile only.
+		hasCreds := in.Key != ""
+		if in.App.ID == "qbittorrent" {
+			hasCreds = in.Username != "" && in.Password != ""
+		}
+		if known && meta.widget != "" && hasCreds {
 			port := in.App.Web.Container
 			if in.WidgetPort != 0 {
 				port = in.WidgetPort

@@ -140,7 +140,7 @@ func TestWriteTailConfigNeverClobbers(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "sub", "config.yaml")
 
-	r := WriteTailConfig(path, []byte("fresh"), 0o600, "Bazarr config")
+	r := WriteTailConfig(path, []byte("fresh"), 0o600, -1, -1, "Bazarr config")
 	if r.Outcome != OutcomeWired {
 		t.Fatalf("fresh write: %+v", r)
 	}
@@ -149,7 +149,7 @@ func TestWriteTailConfigNeverClobbers(t *testing.T) {
 	}
 
 	// Second call must not overwrite — the adoption iron rule.
-	r = WriteTailConfig(path, []byte("REGENERATED"), 0o600, "Bazarr config")
+	r = WriteTailConfig(path, []byte("REGENERATED"), 0o600, -1, -1, "Bazarr config")
 	if r.Outcome != OutcomeExisted {
 		t.Fatalf("existing file must be left alone: %+v", r)
 	}
@@ -164,7 +164,7 @@ func TestWriteTailConfigSecretMode(t *testing.T) {
 	}
 	dir := t.TempDir()
 	path := filepath.Join(dir, "services.yaml")
-	WriteTailConfig(path, []byte("widget: secret"), 0o600, "Homepage")
+	WriteTailConfig(path, []byte("widget: secret"), 0o600, -1, -1, "Homepage")
 	info, err := os.Stat(path)
 	if err != nil {
 		t.Fatal(err)
