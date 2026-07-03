@@ -81,6 +81,7 @@ var apps = []App{
 		Tag:         "latest",
 		Identity:    IdentityEnvPUIDGID,
 		Key:         KeySource{File: "config.xml", Format: KeyXMLApiKey},
+		MediaDir:    "tv",
 		Web:         PortMap{Container: 8989, Host: 8989, Protocol: "tcp", Purpose: "web UI"},
 		Mounts: []Mount{
 			{Kind: SourceAppdata, Target: "/config"},
@@ -98,6 +99,7 @@ var apps = []App{
 		Tag:         "latest",
 		Identity:    IdentityEnvPUIDGID,
 		Key:         KeySource{File: "config.xml", Format: KeyXMLApiKey},
+		MediaDir:    "movies",
 		Web:         PortMap{Container: 7878, Host: 7878, Protocol: "tcp", Purpose: "web UI"},
 		Mounts: []Mount{
 			{Kind: SourceAppdata, Target: "/config"},
@@ -115,6 +117,7 @@ var apps = []App{
 		Tag:         "latest",
 		Identity:    IdentityEnvPUIDGID,
 		Key:         KeySource{File: "config.xml", Format: KeyXMLApiKey},
+		MediaDir:    "music",
 		Web:         PortMap{Container: 8686, Host: 8686, Protocol: "tcp", Purpose: "web UI"},
 		Mounts: []Mount{
 			{Kind: SourceAppdata, Target: "/config"},

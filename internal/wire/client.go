@@ -76,12 +76,18 @@ func (c *Client) PutJSON(ctx context.Context, path string, body, out any) error 
 	return c.do(ctx, http.MethodPut, path, body, out)
 }
 
+// errf builds an error with every registered secret scrubbed — paths can
+// carry keys in query strings (SABnzbd), bodies can be echoed by servers.
+func (c *Client) errf(format string, args ...any) error {
+	return errors.New(c.redactAll(fmt.Sprintf(format, args...)))
+}
+
 func (c *Client) do(ctx context.Context, method, path string, body, out any) error {
 	var payload []byte
 	if body != nil {
 		var err error
 		if payload, err = json.Marshal(body); err != nil {
-			return fmt.Errorf("%s %s: encoding request: %w", method, path, err)
+			return c.errf("%s %s: encoding request: %v", method, path, err)
 		}
 	}
 
@@ -97,7 +103,7 @@ func (c *Client) do(ctx context.Context, method, path string, body, out any) err
 
 		req, err := http.NewRequestWithContext(ctx, method, c.base+path, bytes.NewReader(payload))
 		if err != nil {
-			return fmt.Errorf("%s %s: %w", method, path, err)
+			return c.errf("%s %s: %v", method, path, err)
 		}
 		if body != nil {
 			req.Header.Set("Content-Type", "application/json")
@@ -110,30 +116,30 @@ func (c *Client) do(ctx context.Context, method, path string, body, out any) err
 		if err != nil {
 			// Network errors can embed the URL; the URL never contains the
 			// key (it rides in a header), so this is safe to surface.
-			lastErr = fmt.Errorf("%s %s: %w", method, path, err)
+			lastErr = c.errf("%s %s: %v", method, path, err)
 			continue // connection refused etc. — the app may still be starting
 		}
 
 		respBody, readErr := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 		_ = resp.Body.Close()
 		if readErr != nil {
-			lastErr = fmt.Errorf("%s %s: reading response: %w", method, path, readErr)
+			lastErr = c.errf("%s %s: reading response: %v", method, path, readErr)
 			continue
 		}
 
 		switch {
 		case resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden:
-			return fmt.Errorf("%s %s: %w", method, path, ErrAuth) // retrying a bad key is noise
+			return fmt.Errorf("%s: %w", c.redactAll(method+" "+path), ErrAuth) // retrying a bad key is noise
 		case resp.StatusCode >= 500:
-			lastErr = fmt.Errorf("%s %s: HTTP %d (transient)", method, path, resp.StatusCode)
+			lastErr = c.errf("%s %s: HTTP %d (transient)", method, path, resp.StatusCode)
 			continue
 		case resp.StatusCode >= 400:
-			return fmt.Errorf("%s %s: HTTP %d: %s", method, path, resp.StatusCode, c.redactAll(string(respBody)))
+			return c.errf("%s %s: HTTP %d: %s", method, path, resp.StatusCode, string(respBody))
 		}
 
 		if out != nil {
 			if err := json.Unmarshal(respBody, out); err != nil {
-				return fmt.Errorf("%s %s: decoding response: %w", method, path, err)
+				return c.errf("%s %s: decoding response: %v", method, path, err)
 			}
 		}
 		return nil
