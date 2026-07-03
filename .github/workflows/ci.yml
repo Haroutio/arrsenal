@@ -116,12 +116,14 @@ jobs:
           sed -E 's/api_key:.*/api_key: REDACTED/' /tmp/arrtest/appdata/recyclarr/recyclarr.yml || true
           echo "=== /config ownership and contents ==="
           ls -laR /tmp/arrtest/appdata/recyclarr | head -60
-          echo "=== egress from the arrsenal network ==="
-          docker run --rm --network arrsenal alpine wget -qO- https://api.github.com/zen || echo "NO EGRESS"
-          echo "=== manual sync, full debug output ==="
-          docker run --rm --network arrsenal --user "$(id -u):$(id -g)" \
+          echo "=== recyclarr version ==="
+          docker run --rm ghcr.io/recyclarr/recyclarr:latest --version || true
+          echo "=== debug log from the failing product-run sync ==="
+          sed -E 's/[Aa]pi[_-]?[Kk]ey[^,}]*/api_key REDACTED/g' /tmp/arrtest/appdata/recyclarr/logs/cli/*.debug.log || true
+          echo "=== template registry as recyclarr sees it ==="
+          docker run --rm --user "$(id -u):$(id -g)" \
             -v /tmp/arrtest/appdata/recyclarr:/config \
-            ghcr.io/recyclarr/recyclarr:latest sync --debug || true
+            ghcr.io/recyclarr/recyclarr:latest list includes sonarr || true
       - name: re-run is idempotent — everything comes back existed, nothing re-wired
         run: |
           ./arrsenal --yes --gpu none --admin-user ci --admin-pass ci-wiring-pass \
