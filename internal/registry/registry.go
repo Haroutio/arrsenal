@@ -98,14 +98,19 @@ type App struct {
 	Image       string // full image reference, no tag
 	Tag         string
 	Identity    Identity
-	Web         PortMap   // primary web UI
-	ExtraPorts  []PortMap // anything beyond the web UI (torrent inbound, discovery)
-	Env         map[string]string
-	Mounts      []Mount
-	WiringTier  WiringTier
-	BootPhase   BootPhase
-	GPU         bool     // can take the transcode device (DESIGN.md §8)
-	Warnings    []string // shown in the TUI at selection time, before commitment
+	Web         PortMap // primary web UI
+	// WebPortEnv names an env var that must always equal the web port as seen
+	// INSIDE the container (qBittorrent's WEBUI_PORT: the LSIO image rejects
+	// asymmetric mappings via CSRF/host-header validation). When set, a web
+	// remap moves both sides of the mapping and this env var follows.
+	WebPortEnv string
+	ExtraPorts []PortMap // anything beyond the web UI (torrent inbound, discovery)
+	Env        map[string]string
+	Mounts     []Mount
+	WiringTier WiringTier
+	BootPhase  BootPhase
+	GPU        bool     // can take the transcode device (DESIGN.md §8)
+	Warnings   []string // shown in the TUI at selection time, before commitment
 }
 
 // ImageRef is the full pullable reference including tag.
@@ -206,6 +211,10 @@ func Validate() error {
 		}
 		if !validPhase[a.BootPhase] {
 			return fmt.Errorf("app %q: unknown boot phase %q", a.ID, a.BootPhase)
+		}
+		if a.WebPortEnv != "" && a.Web.Container != a.Web.Host {
+			return fmt.Errorf("app %q: WebPortEnv requires a symmetric default web mapping, got %d:%d",
+				a.ID, a.Web.Host, a.Web.Container)
 		}
 		for _, p := range append([]PortMap{a.Web}, a.ExtraPorts...) {
 			if p.Container <= 0 || p.Host <= 0 {

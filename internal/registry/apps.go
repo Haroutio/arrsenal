@@ -162,9 +162,11 @@ var apps = []App{
 		// 8081 on BOTH sides plus WEBUI_PORT, per the LSIO image docs: an
 		// asymmetric mapping trips qBittorrent's CSRF/host-header validation.
 		// 8081 rather than qB's default 8080 because SABnzbd owns 8080 when
-		// both are selected. Arrs reach it at qbittorrent:8081 by container name.
-		Web: PortMap{Container: 8081, Host: 8081, Protocol: "tcp", Purpose: "web UI"},
-		Env: map[string]string{"WEBUI_PORT": "8081"},
+		// both are selected. WebPortEnv keeps the env var and both mapping
+		// sides moving together under remaps; wiring resolves the container
+		// port through the same rule (state.WebPorts).
+		Web:        PortMap{Container: 8081, Host: 8081, Protocol: "tcp", Purpose: "web UI"},
+		WebPortEnv: "WEBUI_PORT",
 		ExtraPorts: []PortMap{
 			{Container: 6881, Host: 6881, Protocol: "tcp", Purpose: "torrent inbound"},
 			{Container: 6881, Host: 6881, Protocol: "udp", Purpose: "torrent inbound"},
