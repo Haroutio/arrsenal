@@ -21,6 +21,11 @@ type Result struct {
 	Outcome     Outcome
 	Detail      string // failure reason, never secrets
 	FallbackURL string // where to click when Outcome is Failed
+
+	// becameAdopted marks a Failed result that actually means "the server
+	// turned out to be already configured" — the caller may reclassify it
+	// as Existed. Internal to the wiring engine; not shown in the report.
+	becameAdopted bool
 }
 
 // EnsureByName is THE idempotency primitive (DESIGN.md §7.4): list what

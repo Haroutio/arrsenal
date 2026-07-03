@@ -73,6 +73,50 @@ func TestLiveDownloadClientAndRootFolder(t *testing.T) {
 	}
 }
 
+func TestLiveJellyfin(t *testing.T) {
+	freshURL := os.Getenv("ARRSENAL_LIVE_JF_FRESH_URL")
+	adoptedURL := os.Getenv("ARRSENAL_LIVE_JF_ADOPTED_URL")
+	if freshURL == "" && adoptedURL == "" {
+		t.Skip("live env vars not set")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
+
+	if adoptedURL != "" {
+		// The user's real server: wizard long done → exactly one Existed,
+		// nothing touched.
+		results := EnsureJellyfin(ctx, JellyfinTarget{URL: adoptedURL, AdminUser: "x", AdminPass: "x"})
+		t.Logf("adopted: %+v", results)
+		if len(results) != 1 || results[0].Outcome != OutcomeExisted {
+			t.Fatalf("adopted server must be a single Existed: %+v", results)
+		}
+	}
+
+	if freshURL != "" {
+		target := JellyfinTarget{
+			URL: freshURL, AdminUser: "arrsenal", AdminPass: os.Getenv("ARRSENAL_LIVE_JF_PASS"),
+			Libraries: []JellyfinLibrary{
+				{Name: "Movies", CollectionType: "movies", Path: "/media/movies"},
+				{Name: "Shows", CollectionType: "tvshows", Path: "/media/tv"},
+			},
+		}
+		results := EnsureJellyfin(ctx, target)
+		for _, r := range results {
+			t.Logf("fresh: %s → %s %s", r.Connection, r.Outcome, r.Detail)
+			if r.Outcome == OutcomeFailed {
+				t.Fatalf("fresh lane failed: %+v", r)
+			}
+		}
+		// The wizard we just completed makes the server "adopted" — the
+		// re-run must collapse to a single untouched Existed.
+		again := EnsureJellyfin(ctx, target)
+		t.Logf("re-run: %+v", again)
+		if len(again) != 1 || again[0].Outcome != OutcomeExisted {
+			t.Fatalf("re-run must be a single Existed: %+v", again)
+		}
+	}
+}
+
 func TestLiveProwlarrApplication(t *testing.T) {
 	url := os.Getenv("ARRSENAL_LIVE_PROWLARR_URL")
 	prowlarrKey := os.Getenv("ARRSENAL_LIVE_PROWLARR_KEY")
