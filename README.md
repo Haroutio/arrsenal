@@ -31,6 +31,8 @@
 ~≈≈≈≈≈~      ~≈≈≈≈≈~     ~≈≈≈≈≈~      ~≈≈≈≈≈~     ~~≈≈≈≈~      ~≈≈≈≈≈~     ~~≈≈≈≈~~     ~≈≈≈≈≈
 ```
 
+# Arrsenal — the self-hosted media server that installs itself
+
 [![CI](https://github.com/Haroutio/arrsenal/actions/workflows/ci.yml/badge.svg)](https://github.com/Haroutio/arrsenal/actions/workflows/ci.yml)
 [![Latest release](https://img.shields.io/github/v/release/Haroutio/arrsenal)](https://github.com/Haroutio/arrsenal/releases/latest)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -223,6 +225,45 @@ install Docker yourself and you're Tier 2.
 | v1.0 | Stability: docs site, hardening, stable state schema | next |
 
 Architecture and design reasoning live in [docs/DESIGN.md](docs/DESIGN.md).
+
+## FAQ
+
+### Is this just another docker-compose template?
+
+No — the compose file is the easy 10%. Arrsenal's point is the other 90%:
+after the containers start, it talks to every app's API and connects them —
+Prowlarr to the arrs, the arrs to SABnzbd, root folders, authentication,
+Jellyfin's wizard and hardware transcoding, TRaSH quality profiles, the
+Seerr request page, the dashboard. You open a browser to a working system,
+not to nine setup wizards.
+
+### Does it work with an existing Sonarr/Radarr/Jellyfin setup?
+
+Yes, carefully. Preflight detects port and container-name collisions and
+offers remaps, and any app whose configuration predates the run is
+*adopted*: arrsenal wires what was never set up (like an unfinished
+authentication screen) but never modifies settings you've made. Removing an
+app removes its container and keeps its config.
+
+### Which media server should I pick — Jellyfin, Plex, or Emby?
+
+Jellyfin is the recommendation because its hardware transcoding is free and
+arrsenal can configure it end-to-end, including the setup wizard, libraries,
+NVENC/QuickSync/VAAPI, and the Seerr request page. Plex and Emby install
+fine but keep their paid-feature and browser-login steps.
+
+### Does it set up TRaSH Guides quality settings?
+
+Yes — answer three questions (1080p or 4K? remuxes? anime?) and the matching
+[TRaSH-guide](https://trash-guides.info) quality profiles, custom format
+scores, and size limits are synced into Sonarr and Radarr via
+[Recyclarr](https://recyclarr.dev), and kept current on every re-run.
+
+### What does it run on?
+
+Any Linux with Docker (Debian 12+/Ubuntu 22.04+ get prerequisites installed
+for you). One static Go binary, no runtime dependencies. Windows and WSL2
+are not supported — a media server wants a real Linux host or VM.
 
 ## Contributing
 
