@@ -1,0 +1,5 @@
+# Everything this repo ships targets Linux — keep LF everywhere,
+# regardless of contributor OS. A CRLF install.sh is a broken install.sh.
+* text=auto eol=lf
+*.png binary
+*.gif binary
