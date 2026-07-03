@@ -166,6 +166,30 @@ func Orchestrate(ctx context.Context, spec Spec) []Result {
 		}
 	}
 
+	// 5.5 The manual-tier apps (issue #26): installed, GPU-configured where
+	// applicable, but their setup lives in their own UIs (Plex claim +
+	// libraries; Emby wizard; Overseerr's Plex OAuth). Adopted instances are
+	// left as configured.
+	manualNotes := []struct{ id, note string }{
+		{"plex", "finish setup in Plex's web UI (claim the server if you skipped the token, add libraries pointing at /media)"},
+		{"emby", "finish Emby's setup wizard (add libraries pointing at /media; hardware transcoding needs Emby Premiere)"},
+		{"overseerr", "finish Overseerr's wizard — sign in with your Plex account and connect your arrs"},
+	}
+	for _, m := range manualNotes {
+		id, note := m.id, m.note
+		if _, ok := sel[id]; !ok {
+			continue
+		}
+		app := sel[id]
+		if spec.Adopted[id] {
+			results = append(results, Result{Connection: app.Name + " setup", Outcome: OutcomeExisted,
+				Detail: "left as configured"})
+			continue
+		}
+		results = append(results, Result{Connection: app.Name + " setup", Outcome: OutcomeManual,
+			Detail: note, FallbackURL: spec.Access(id)})
+	}
+
 	// 6. Tail configs (written before the tail apps first start — the cmd
 	// layer sequences that; these calls only generate).
 	if _, ok := sel["bazarr"]; ok {

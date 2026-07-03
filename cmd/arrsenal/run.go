@@ -176,7 +176,20 @@ func interactiveFill(s *state.State, o *options) error {
 		fmt.Println()
 	}
 
-	// 5. VPN for qBittorrent (issue #27): only offered when qBittorrent is
+	// 5. Plex claim token (issue #26): only useful on a FRESH plex (an
+	// adopted server is already claimed), only valid 4 minutes, so it is
+	// asked for at the last responsible moment, skippable.
+	if selectedID(s, "plex") && o.plexClaim == "" {
+		if entries, err := os.ReadDir(filepath.Join(s.AppdataRoot, "plex")); err != nil || len(entries) == 0 {
+			fmt.Println("Plex: get a claim token from https://www.plex.tv/claim (valid 4 minutes).")
+			fmt.Print("Claim token (enter to skip — you can claim later in the web UI): ")
+			if line, err := bufio.NewReader(os.Stdin).ReadString('\n'); err == nil {
+				o.plexClaim = strings.TrimSpace(line)
+			}
+		}
+	}
+
+	// 6. VPN for qBittorrent (issue #27): only offered when qBittorrent is
 	// selected and nothing is configured yet; flags outrank the prompt.
 	if selectedID(s, "qbittorrent") && !s.VPNEnabled() && o.vpnProvider == "" {
 		if confirm("Route qBittorrent through a VPN (gluetun, WireGuard)?", false) {
@@ -338,6 +351,23 @@ func pipeline(s *state.State, o options) error {
 			filepath.Join(s.AppdataRoot, "qbittorrent", "qBittorrent", "qBittorrent.conf"),
 			conf, 0o600, "qBittorrent ← pre-seeded WebUI password")
 		fmt.Printf("%s: %s %s\n", r.Connection, r.Outcome, r.Detail)
+	}
+
+	// Plex's claim token is per-run (4-minute expiry): written into a 0600
+	// env-file the compose service references, empty when none was given.
+	// After the first claimed boot the token is irrelevant (issue #26).
+	if selectedID(s, "plex") {
+		claimPath := filepath.Join(s.AppdataRoot, "plex", "claim.env")
+		if err := os.MkdirAll(filepath.Dir(claimPath), 0o755); err != nil {
+			return err
+		}
+		content := ""
+		if o.plexClaim != "" {
+			content = fmt.Sprintf("PLEX_CLAIM=%s\n", o.plexClaim)
+		}
+		if err := os.WriteFile(claimPath, []byte(content), 0o600); err != nil {
+			return fmt.Errorf("writing plex claim file: %w", err)
+		}
 	}
 
 	// gluetun's credentials file is Arrsenal-owned (derived purely from

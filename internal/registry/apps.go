@@ -37,6 +37,51 @@ var apps = []App{
 		GPU:        true,
 	},
 	{
+		ID:          "plex",
+		Name:        "Plex",
+		Description: "Media server — polished apps everywhere; hardware transcoding requires Plex Pass",
+		Role:        RoleMediaServer,
+		Image:       "lscr.io/linuxserver/plex",
+		Tag:         "latest",
+		Identity:    IdentityEnvPUIDGID,
+		Web:         PortMap{Container: 32400, Host: 32400, Protocol: "tcp", Purpose: "web UI"},
+		Env:         map[string]string{"VERSION": "docker"},
+		Mounts: []Mount{
+			{Kind: SourceAppdata, Target: "/config"},
+			{Kind: SourceData, Sub: "media", Target: "/media"},
+			{Kind: SourceHost, Sub: "/dev/shm/plex", Target: "/transcode"},
+		},
+		WiringTier: WiringManual, // claim + server setup live in Plex's own UI
+		BootPhase:  BootCore,
+		GPU:        true,
+		Warnings: []string{
+			"Hardware transcoding requires a paid Plex Pass (Jellyfin's is free)",
+			"First boot asks for a claim token from plex.tv/claim (valid 4 minutes)",
+		},
+	},
+	{
+		ID:          "emby",
+		Name:        "Emby",
+		Description: "Media server — Jellyfin's commercial sibling; hardware transcoding requires Emby Premiere",
+		Role:        RoleMediaServer,
+		Image:       "lscr.io/linuxserver/emby",
+		Tag:         "latest",
+		Identity:    IdentityEnvPUIDGID,
+		// Container 8096 like Jellyfin; host defaults to 8097 so both can
+		// run side by side during a migration.
+		Web: PortMap{Container: 8096, Host: 8097, Protocol: "tcp", Purpose: "web UI"},
+		Mounts: []Mount{
+			{Kind: SourceAppdata, Target: "/config"},
+			{Kind: SourceData, Sub: "media", Target: "/media"},
+		},
+		WiringTier: WiringManual, // no automatable startup wizard
+		BootPhase:  BootCore,
+		GPU:        true,
+		Warnings: []string{
+			"Hardware transcoding requires a paid Emby Premiere subscription (Jellyfin's is free)",
+		},
+	},
+	{
 		ID:   "jellyseerr",
 		Name: "Jellyseerr",
 		// Upstream merged with Overseerr and renamed to Seerr in 2026;
@@ -55,6 +100,26 @@ var apps = []App{
 		},
 		WiringTier: WiringSemiAuto, // best-effort; its own wizard is the 2-minute fallback
 		BootPhase:  BootCore,
+	},
+	{
+		ID:          "overseerr",
+		Name:        "Overseerr",
+		Description: "Requests for Plex — pairs with a Plex server (sign-in is Plex OAuth)",
+		Role:        RoleRequests,
+		Image:       "lscr.io/linuxserver/overseerr",
+		Tag:         "latest",
+		Identity:    IdentityEnvPUIDGID,
+		// Container 5055 like Jellyseerr; host defaults to 5056 so both
+		// request apps can coexist.
+		Web: PortMap{Container: 5055, Host: 5056, Protocol: "tcp", Purpose: "web UI"},
+		Mounts: []Mount{
+			{Kind: SourceAppdata, Target: "/config"},
+		},
+		WiringTier: WiringManual, // setup wizard requires a Plex browser login
+		BootPhase:  BootCore,
+		Warnings: []string{
+			"Setup requires signing in with your Plex account (browser) — cannot be automated",
+		},
 	},
 	{
 		ID:          "prowlarr",
