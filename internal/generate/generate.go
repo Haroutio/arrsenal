@@ -214,6 +214,11 @@ func applyGPU(s *state.State, svc *service) {
 		svc.Deploy = &deploy{Resources: resources{Reservations: reservations{
 			Devices: []deviceReservation{{Driver: "nvidia", Count: "all", Capabilities: []string{"gpu"}}},
 		}}}
+		// Older container toolkits default the driver capabilities to
+		// compute+utility — no video — which silently breaks NVENC inside
+		// the container. Explicit is the only portable setting (it is also
+		// what Jellyfin's own docs prescribe).
+		svc.Environment["NVIDIA_DRIVER_CAPABILITIES"] = "all"
 	case state.GPUIntel, state.GPUAMD:
 		svc.Devices = []string{"/dev/dri:/dev/dri"}
 	case state.GPUNone:
