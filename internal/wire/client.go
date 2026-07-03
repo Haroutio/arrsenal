@@ -54,6 +54,16 @@ func (c *Client) WithHeader(name, value string) *Client {
 	return c
 }
 
+// WithRetry overrides the retry policy. Best-effort steps use a snappy one
+// so the run never stalls on an app that may simply be down.
+func (c *Client) WithRetry(attempts int, backoff time.Duration) *Client {
+	if attempts > 0 {
+		c.attempts = attempts
+	}
+	c.backoff = backoff
+	return c
+}
+
 // NewClient builds a client for one app's API.
 func NewClient(base, apiKey, keyHeader string) *Client {
 	return &Client{

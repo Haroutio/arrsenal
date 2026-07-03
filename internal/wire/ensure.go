@@ -8,10 +8,14 @@ type Outcome string
 
 // Outcomes. Existed is a first-class success: it is what makes re-runs and
 // brownfield adoption safe — an entry that is already there is left exactly
-// as the user (or a previous run) configured it.
+// as the user (or a previous run) configured it. Manual is the honest
+// outcome of the semi-auto tier: installed and reachable, but a step only a
+// human can do remains (an OAuth login, say) — never a failure, always with
+// a fallback URL (DESIGN.md §7.6).
 const (
 	OutcomeWired   Outcome = "wired"
 	OutcomeExisted Outcome = "existed"
+	OutcomeManual  Outcome = "manual"
 	OutcomeFailed  Outcome = "failed"
 )
 
