@@ -82,14 +82,15 @@ var apps = []App{
 		},
 	},
 	{
-		ID:   "jellyseerr",
-		Name: "Jellyseerr",
-		// Upstream merged with Overseerr and renamed to Seerr in 2026;
-		// ghcr.io/seerr-team/seerr is the maintained continuation (same port,
-		// same /app/config layout). The old fallenbagel/jellyseerr image still
-		// pulls but no longer receives releases. ID stays "jellyseerr" — it is
-		// the name users know and the appdata dir stays migration-compatible.
-		Description: "Requests — users ask, the arrs deliver",
+		ID: "jellyseerr",
+		// Upstream is the MERGER of Overseerr and the Jellyseerr fork,
+		// renamed Seerr in 2026 — one requests app for all three media
+		// servers (ghcr.io/seerr-team/seerr; same port, same /app/config
+		// layout). The display name follows upstream; the ID does NOT:
+		// IDs live in state files and appdata paths, and renaming them
+		// breaks every existing install (schema promise, DESIGN.md §11).
+		Name:        "Seerr",
+		Description: "Requests — users ask, the arrs deliver; works with Jellyfin, Plex and Emby",
 		Role:        RoleRequests,
 		Image:       "ghcr.io/seerr-team/seerr",
 		Tag:         "latest",
@@ -104,7 +105,7 @@ var apps = []App{
 	{
 		ID:          "overseerr",
 		Name:        "Overseerr",
-		Description: "Requests for Plex — pairs with a Plex server (sign-in is Plex OAuth)",
+		Description: "Requests for Plex — superseded upstream: Seerr now serves Plex too",
 		Role:        RoleRequests,
 		Image:       "lscr.io/linuxserver/overseerr",
 		Tag:         "latest",
@@ -119,6 +120,7 @@ var apps = []App{
 		BootPhase:  BootCore,
 		Warnings: []string{
 			"Setup requires signing in with your Plex account (browser) — cannot be automated",
+			"Overseerr merged into Seerr upstream — pick Seerr unless you specifically want this",
 		},
 	},
 	{
