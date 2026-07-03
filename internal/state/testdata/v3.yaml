@@ -1,0 +1,16 @@
+# As written by v0.3.0 — adds vpn (gluetun) and its secrets.
+version: 3
+apps: [jellyfin, sonarr, prowlarr, qbittorrent]
+puid: 1000
+pgid: 1000
+tz: Etc/UTC
+umask: "002"
+data_root: /data
+appdata_root: /opt/appdata
+gpu: none
+vpn:
+  provider: mullvad
+  countries: Netherlands
+secrets:
+  qbittorrent_webui_password: fixture-not-a-real-password
+  wireguard_private_key: fixture-not-a-real-key=

@@ -1,0 +1,15 @@
+# As written by early v0.3 — adds optional downloads_root (split storage,
+# issue #59) and port remaps existed from v1 but are exercised here.
+version: 2
+apps: [jellyfin, sonarr, radarr, prowlarr, sabnzbd]
+puid: 1000
+pgid: 1000
+tz: America/Los_Angeles
+umask: "002"
+data_root: /mnt/pool/data
+appdata_root: /opt/appdata
+downloads_root: /mnt/scratch/downloads
+gpu: intel
+port_remaps:
+  sonarr:
+    8989: 18989

@@ -27,14 +27,18 @@ warn() { printf '\033[1;33marrsenal!\033[0m %s\n' "$*" >&2; }
 die()  { printf '\033[1;31marrsenal✗\033[0m %s\n' "$*" >&2; exit 1; }
 
 # ask "question" default(y|n) → 0 yes / 1 no. Reads /dev/tty because stdin
-# is the script itself under curl|bash.
+# is the script itself under curl|bash. With no terminal to ask on, it DIES
+# rather than assume: a headless pipe must never trigger a default-yes
+# install ("nothing installs silently" is the whole promise).
 ask() {
   local q="$1" def="${2:-n}" reply
   if [ -n "$ARRSENAL_YES" ]; then
     [ "$def" = "y" ] && return 0 || return 1
   fi
   if [ "$def" = "y" ]; then q="$q [Y/n] "; else q="$q [y/N] "; fi
-  read -r -p "$q" reply < /dev/tty || reply=""
+  if ! read -r -p "$q" reply < /dev/tty; then
+    die "no terminal to ask on — re-run interactively, or set ARRSENAL_YES=1 to accept the default-yes steps."
+  fi
   reply="${reply:-$def}"
   case "$reply" in [Yy]*) return 0 ;; *) return 1 ;; esac
 }

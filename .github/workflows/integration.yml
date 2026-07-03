@@ -1,0 +1,146 @@
+# The integration suite as a reusable workflow: ci.yml runs it on every PR,
+# and release.yml runs it as the TAG GATE (issue #32) — a release build that
+# has not just installed, wired, re-run, updated, and uninstalled a real
+# stack does not ship.
+name: Integration
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: stable
+      - run: go build -o arrsenal ./cmd/arrsenal
+      # Shared-runner IPs get registry rate limits (toomanyrequests) in
+      # bursts; pre-pull with backoff so the product run never eats the flake.
+      - name: pre-pull images with retry
+        run: |
+          for image in lscr.io/linuxserver/prowlarr:latest lscr.io/linuxserver/sonarr:latest lscr.io/linuxserver/sabnzbd:latest ghcr.io/recyclarr/recyclarr:8; do
+            for attempt in 1 2 3 4; do
+              docker pull --quiet "$image" && break
+              echo "pull $image failed (attempt $attempt), backing off…"
+              sleep $((attempt * 20))
+            done
+          done
+      - name: without --yes and without a TTY, it fails with instructions (never hangs)
+        run: |
+          set +e
+          out=$(./arrsenal --state /tmp/never/arrsenal.yaml 2>&1)
+          code=$?
+          set -e
+          [ "$code" -ne 0 ] || (echo "must fail without a TTY" && exit 1)
+          echo "$out" | grep -q -- "--yes" || (echo "error must point at --yes: $out" && exit 1)
+      - name: headless install brings the stack up AND wires it
+        run: |
+          ./arrsenal --yes --apps prowlarr,sonarr,sabnzbd --gpu none \
+            --admin-user ci --admin-pass ci-wiring-pass \
+            --trash --trash-resolution 1080p \
+            --data-root /tmp/arrtest/data --appdata-root /tmp/arrtest/appdata \
+            --state /tmp/arrtest/arrsenal.yaml --artifacts-dir /tmp/arrtest \
+            --puid "$(id -u)" --pgid "$(id -g)" | tee /tmp/first-run.log
+      - name: containers are running
+        run: |
+          docker ps --format '{{.Names}} {{.Status}}'
+          for c in prowlarr sonarr sabnzbd; do docker ps --format '{{.Names}}' | grep -x "$c"; done
+      - name: the killer feature actually wired — assert via the apps' own APIs
+        run: |
+          SONK=$(sed -nE 's#.*<ApiKey>([^<]+)</ApiKey>.*#\1#p' /tmp/arrtest/appdata/sonarr/config.xml)
+          PROWK=$(sed -nE 's#.*<ApiKey>([^<]+)</ApiKey>.*#\1#p' /tmp/arrtest/appdata/prowlarr/config.xml)
+          assert_json() { # url header jq-expr label
+            body=$(curl -s -H "$2" "$1")
+            if ! echo "$body" | jq -e "$3" >/dev/null; then
+              echo "ASSERTION FAILED: $4"
+              echo "GET $1 returned:"; echo "$body" | head -c 2000; echo
+              exit 1
+            fi
+            echo "ok: $4"
+          }
+          assert_json http://localhost:8989/api/v3/downloadclient "X-Api-Key: $SONK" \
+            '.[] | select(.name=="SABnzbd")' "sonarr has the SABnzbd download client"
+          assert_json http://localhost:8989/api/v3/rootfolder "X-Api-Key: $SONK" \
+            '.[] | select(.path=="/data/media/tv")' "sonarr has the /data/media/tv root folder"
+          assert_json http://localhost:8989/api/v3/config/host "X-Api-Key: $SONK" \
+            'select(.authenticationMethod=="forms")' "sonarr auth is forms"
+          assert_json http://localhost:9696/api/v1/applications "X-Api-Key: $PROWK" \
+            '.[] | select(.name=="Sonarr")' "prowlarr knows sonarr"
+          echo "sab whitelist repaired:"
+          grep -E '^host_whitelist' /tmp/arrtest/appdata/sabnzbd/sabnzbd.ini | tee /dev/stderr | grep -q sabnzbd
+          echo "sab folders on the data tree:"
+          grep -E '^(download_dir|complete_dir)' /tmp/arrtest/appdata/sabnzbd/sabnzbd.ini | tee /dev/stderr
+          grep -qE '^complete_dir = /data/usenet/complete' /tmp/arrtest/appdata/sabnzbd/sabnzbd.ini
+          assert_json http://localhost:8989/api/v3/qualityprofile "X-Api-Key: $SONK" \
+            '.[] | select(.name=="WEB-1080p")' "TRaSH WEB-1080p quality profile synced into sonarr"
+      - name: re-run is idempotent — everything comes back existed, nothing re-wired
+        run: |
+          ./arrsenal --yes --gpu none --admin-user ci --admin-pass ci-wiring-pass \
+            --state /tmp/arrtest/arrsenal.yaml --artifacts-dir /tmp/arrtest | tee /tmp/second-run.log
+          # Assert within the wiring REPORT only — container readiness lines
+          # legitimately print ✓ and must not trip the re-wire check.
+          awk '/^Wiring report:/,0' /tmp/second-run.log > /tmp/report.log
+          cat /tmp/report.log
+          grep -q "existed" /tmp/report.log
+          if grep -q "✗" /tmp/report.log; then echo "re-run produced failures" && exit 1; fi
+          if grep -qE "^  ✓" /tmp/report.log; then echo "re-run re-wired something — idempotency broken" && exit 1; fi
+      - name: arrsenal update pulls and reconciles
+        run: |
+          ./arrsenal update --state /tmp/arrtest/arrsenal.yaml --artifacts-dir /tmp/arrtest
+      - name: deselecting an app removes its container, preserves its config
+        run: |
+          ./arrsenal --yes --apps prowlarr,sonarr --gpu none \
+            --admin-user ci --admin-pass ci-wiring-pass \
+            --state /tmp/arrtest/arrsenal.yaml --artifacts-dir /tmp/arrtest
+          docker ps --format '{{.Names}}' | grep -x sonarr
+          if docker ps -a --format '{{.Names}}' | grep -x sabnzbd; then
+            echo "sabnzbd container should have been reconciled away" && exit 1
+          fi
+          test -d /tmp/arrtest/appdata/sabnzbd || (echo "appdata must be preserved" && exit 1)
+      - name: uninstall is reversible by default
+        run: |
+          ./arrsenal uninstall --state /tmp/arrtest/arrsenal.yaml --artifacts-dir /tmp/arrtest
+          if docker ps -a --format '{{.Names}}' | grep -xE 'prowlarr|sonarr'; then
+            echo "containers should be gone" && exit 1
+          fi
+          test -d /tmp/arrtest/appdata/sonarr || (echo "appdata must survive default uninstall" && exit 1)
+          test -f /tmp/arrtest/arrsenal.yaml || (echo "state must survive default uninstall" && exit 1)
+      - name: purge without the typed confirmation aborts and deletes nothing
+        run: |
+          if echo "no thanks" | ./arrsenal uninstall --purge \
+              --state /tmp/arrtest/arrsenal.yaml --artifacts-dir /tmp/arrtest; then
+            echo "purge must fail without confirmation" && exit 1
+          fi
+          test -d /tmp/arrtest/appdata/sonarr || (echo "aborted purge deleted appdata!" && exit 1)
+          test -f /tmp/arrtest/arrsenal.yaml || (echo "aborted purge deleted state!" && exit 1)
+      - name: purge with confirmation deletes exactly the managed scope
+        run: |
+          touch /tmp/arrtest/appdata/NOT-ARRSENALS.txt   # a foreign neighbor in the appdata root
+          echo "purge" | ./arrsenal uninstall --purge \
+            --state /tmp/arrtest/arrsenal.yaml --artifacts-dir /tmp/arrtest
+          if [ -d /tmp/arrtest/appdata/sonarr ]; then echo "purge left app config" && exit 1; fi
+          if [ -d /tmp/arrtest/appdata/recyclarr ]; then echo "purge left recyclarr config (holds the arr API keys)" && exit 1; fi
+          if [ -f /tmp/arrtest/arrsenal.yaml ]; then echo "purge left state" && exit 1; fi
+          test -f /tmp/arrtest/appdata/NOT-ARRSENALS.txt || (echo "purge overreached beyond managed apps!" && exit 1)
+          test -d /tmp/arrtest/data/media || (echo "purge touched the data root!" && exit 1)
+      # Recyclarr is our one integration whose data source lives outside this
+      # repo (the TRaSH guides); when it breaks, the report tail is rarely
+      # enough — surface its own debug log. Placed last so it fires no matter
+      # which step the sync failed in (the re-run and deselect steps sync too).
+      - name: debug — recyclarr autopsy on failure
+        if: failure()
+        run: |
+          echo "=== generated config (keys redacted) ==="
+          sed -E 's/api_key:.*/api_key: REDACTED/' /tmp/arrtest/appdata/recyclarr/recyclarr.yml || true
+          echo "=== recyclarr version ==="
+          docker run --rm ghcr.io/recyclarr/recyclarr:8 --version || true
+          echo "=== debug logs, all syncs (keys redacted) ==="
+          sed -E 's/[Aa]pi[_-]?[Kk]ey[^,}]*/api_key REDACTED/g' /tmp/arrtest/appdata/recyclarr/logs/cli/*.debug.log || true
+      - name: teardown
+        if: always()
+        run: cd /tmp/arrtest 2>/dev/null && docker compose down --remove-orphans || true

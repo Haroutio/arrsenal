@@ -229,8 +229,26 @@ mode matures in v0.3.
   `servarr-stack` is a crowded generic namespace (10+ existing repos), and the memorable
   name belongs in the URL people share. Discoverability is what GitHub topics are for.
 - Releases: **goreleaser** — linux/amd64 + linux/arm64, tagged versions, a checksums
-  file that `install.sh` verifies against.
+  file that `install.sh` verifies against. The full integration suite is the **tag
+  gate** (v1.0, issue #32): release.yml runs it against the tagged commit before
+  goreleaser builds anything — a tag that cannot install, wire, and cleanly uninstall
+  a real stack produces no release.
 - v0.1 ships **quietly** (tagged, no announcements). v0.2 — the wiring — is the debut.
+
+### State-schema stability promise (v1.0, issue #32)
+
+The schema version is a monotonically increasing integer, stamped on every save.
+The promise, in load-order:
+
+1. A state file written by ANY released version loads in every later version —
+   migration happens in memory at load, and is persisted only by the next save.
+2. Saving always stamps the binary's own version, so an older binary meeting a newer
+   file refuses with an "upgrade arrsenal" message instead of silently dropping the
+   fields it doesn't know (the failure mode that actually loses data).
+3. A file with no version stanza is not ours; refuse to touch it.
+4. Every released schema version has a fixture in `internal/state/testdata/`, and
+   `TestEveryHistoricalSchemaVersionLoads` proves each one loads and upgrades — in
+   every build, forever. Deleting a fixture is a compatibility break, not a cleanup.
 
 ## 12. Testing
 
