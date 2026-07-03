@@ -392,7 +392,7 @@ func pipeline(s *state.State, o options) error {
 		}
 		r := wire.WriteTailConfig(
 			filepath.Join(s.AppdataRoot, "qbittorrent", "qBittorrent", "qBittorrent.conf"),
-			conf, 0o600, "qBittorrent ← pre-seeded WebUI password")
+			conf, 0o600, s.PUID, s.PGID, "qBittorrent ← pre-seeded WebUI password")
 		fmt.Printf("%s: %s %s\n", r.Connection, r.Outcome, r.Detail)
 	}
 
@@ -574,7 +574,8 @@ func buildSpec(s *state.State, o options, adopted map[string]bool) wire.Spec {
 		Apps:        apps,
 		Adopted:     adopted,
 		AppdataRoot: s.AppdataRoot,
-		TRaSH:       trash, RecyclarrDir: recyclarrDir, RunRecyclarr: runRecyclarr,
+		PUID:        s.PUID, PGID: s.PGID,
+		TRaSH: trash, RecyclarrDir: recyclarrDir, RunRecyclarr: runRecyclarr,
 		AdminUser: o.adminUser,
 		AdminPass: o.adminPass,
 		QBitPass:  s.Secrets.QBittorrentPassword,
@@ -588,7 +589,12 @@ func buildSpec(s *state.State, o options, adopted map[string]bool) wire.Spec {
 			if s.HostNetworked(id) {
 				port = app.Web.Container
 			}
-			return fmt.Sprintf("http://127.0.0.1:%d", port)
+			// The LAN address, not 127.0.0.1: these URLs end up in the
+			// dashboard tiles and report fallbacks, which are clicked from
+			// OTHER machines (field report: every Homepage tile pointed at
+			// the viewer's own localhost). Wiring calls work either way —
+			// the ports bind 0.0.0.0.
+			return fmt.Sprintf("http://%s:%d", lanIP(), port)
 		},
 		QBitContainerPort: qbitContainer,
 		QBitHost:          qbitHost,

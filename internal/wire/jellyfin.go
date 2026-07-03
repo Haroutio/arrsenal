@@ -39,7 +39,11 @@ const authHeader = `MediaBrowser Client="Arrsenal", Device="Arrsenal", DeviceId=
 // An ADOPTED Jellyfin (wizard already completed) is left entirely alone —
 // its users, libraries and encoder settings are the owner's — reported as a
 // single Existed line.
-func EnsureJellyfin(ctx context.Context, t JellyfinTarget) []Result {
+//
+// The second return is the API key minted for the dashboard widget ("" when
+// the server was adopted or anything failed — callers must treat an empty
+// key as "no widget", never as a credential).
+func EnsureJellyfin(ctx context.Context, t JellyfinTarget) ([]Result, string) {
 	anon := NewClient(t.URL, "", "").WithHeader("X-Emby-Authorization", authHeader)
 	anon.WithRedaction(t.AdminPass)
 
@@ -51,11 +55,11 @@ func EnsureJellyfin(ctx context.Context, t JellyfinTarget) []Result {
 	switch detectStartup(ctx, anon) {
 	case jfAdopted:
 		return []Result{{Connection: "Jellyfin setup", Outcome: OutcomeExisted,
-			Detail: "wizard already completed — users, libraries and encoding left as configured"}}
+			Detail: "wizard already completed — users, libraries and encoding left as configured"}}, ""
 	case jfUnknown:
 		return []Result{{Connection: "Jellyfin setup", Outcome: OutcomeFailed,
 			Detail: "could not confirm whether Jellyfin's setup wizard has run; refusing to touch it rather than risk " +
-				"re-running setup on a configured server — complete Jellyfin manually at its web UI. check: docker logs jellyfin"}}
+				"re-running setup on a configured server — complete Jellyfin manually at its web UI. check: docker logs jellyfin"}}, ""
 	}
 
 	var results []Result
@@ -67,16 +71,16 @@ func EnsureJellyfin(ctx context.Context, t JellyfinTarget) []Result {
 	if r.Outcome == OutcomeFailed {
 		if r.becameAdopted {
 			return []Result{{Connection: "Jellyfin setup", Outcome: OutcomeExisted,
-				Detail: "server was already configured — left untouched"}}
+				Detail: "server was already configured — left untouched"}}, ""
 		}
-		return results
+		return results, ""
 	}
 
 	// From here on we act as the admin we just created.
 	token, err := authenticate(ctx, t)
 	if err != nil {
 		return append(results, Result{Connection: "Jellyfin login", Outcome: OutcomeFailed,
-			Detail: fmt.Sprintf("authenticating as the new admin: %v", err)})
+			Detail: fmt.Sprintf("authenticating as the new admin: %v", err)}), ""
 	}
 	authed := NewClient(t.URL, token, "X-Emby-Token")
 	authed.WithRedaction(t.AdminPass)
@@ -87,7 +91,59 @@ func EnsureJellyfin(ctx context.Context, t JellyfinTarget) []Result {
 	if t.HWAccel != "" {
 		results = append(results, ensureEncoder(ctx, authed, t.HWAccel, t.TranscodePath))
 	}
-	return results
+	apiKeyResult, apiKey := ensureAPIKey(ctx, authed)
+	results = append(results, apiKeyResult)
+	return results, apiKey
+}
+
+// apiKeyApp names the key in Jellyfin's dashboard — also the idempotency
+// handle: one key per app name, reused across runs.
+const apiKeyApp = "Arrsenal (Homepage widget)"
+
+// ensureAPIKey mints (or finds) the API key the dashboard widget needs — a
+// keyless jellyfin widget renders a red API error, not a tile (field
+// report). List → reuse by app name → create → re-list.
+func ensureAPIKey(ctx context.Context, authed *Client) (Result, string) {
+	conn := "Jellyfin API key (dashboard widget)"
+	type keyList struct {
+		Items []struct {
+			AccessToken string `json:"AccessToken"`
+			AppName     string `json:"AppName"`
+		} `json:"Items"`
+	}
+	find := func() (string, error) {
+		var keys keyList
+		if err := authed.GetJSON(ctx, "/Auth/Keys", &keys); err != nil {
+			return "", err
+		}
+		for _, k := range keys.Items {
+			if k.AppName == apiKeyApp {
+				return k.AccessToken, nil
+			}
+		}
+		return "", nil
+	}
+
+	key, err := find()
+	if err != nil {
+		return Result{Connection: conn, Outcome: OutcomeFailed,
+			Detail: fmt.Sprintf("listing API keys: %v", err)}, ""
+	}
+	if key != "" {
+		authed.WithRedaction(key)
+		return Result{Connection: conn, Outcome: OutcomeExisted}, key
+	}
+	if err := authed.PostJSON(ctx, "/Auth/Keys?App="+url.QueryEscape(apiKeyApp), nil, nil); err != nil {
+		return Result{Connection: conn, Outcome: OutcomeFailed,
+			Detail: fmt.Sprintf("creating the API key: %v", err)}, ""
+	}
+	key, err = find()
+	if err != nil || key == "" {
+		return Result{Connection: conn, Outcome: OutcomeFailed,
+			Detail: fmt.Sprintf("key created but not found on re-list: %v", err)}, ""
+	}
+	authed.WithRedaction(key)
+	return Result{Connection: conn, Outcome: OutcomeWired}, key
 }
 
 // jfStartupState is what the anonymous /Startup probe concluded.

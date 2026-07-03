@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 )
 
@@ -108,10 +109,16 @@ func HomepageServices(services []HomepageService) []byte {
 
 // WriteTailConfig writes content to path only when the file is ABSENT —
 // never clobbering an existing (adopted, or previously-generated) config
-// (DESIGN.md §1 iron rule). mode restricts secret-bearing files.
-func WriteTailConfig(path string, content []byte, mode os.FileMode, label string) Result {
+// (DESIGN.md §1 iron rule). mode restricts secret-bearing files, and the
+// file is handed to uid:gid — a 0600 file left owned by root (arrsenal runs
+// under sudo) is unreadable to the container that needs it (field report:
+// Homepage showed a parse error instead of a dashboard). On the existed
+// path, ownership is REPAIRED but content never touched — that heals
+// installs made before this fix.
+func WriteTailConfig(path string, content []byte, mode os.FileMode, uid, gid int, label string) Result {
 	conn := label
 	if _, err := os.Stat(path); err == nil {
+		chownFile(path, uid, gid)
 		return Result{Connection: conn, Outcome: OutcomeExisted,
 			Detail: "existing config left untouched"}
 	}
@@ -121,5 +128,16 @@ func WriteTailConfig(path string, content []byte, mode os.FileMode, label string
 	if err := os.WriteFile(path, content, mode); err != nil {
 		return Result{Connection: conn, Outcome: OutcomeFailed, Detail: fmt.Sprintf("writing %s: %v", path, err)}
 	}
+	chownFile(path, uid, gid)
 	return Result{Connection: conn, Outcome: OutcomeWired}
+}
+
+// chownFile is best-effort (non-root runs cannot chown and do not need to:
+// their files are already owned by the invoking user, which is the PUID in
+// every non-root setup that works at all).
+func chownFile(path string, uid, gid int) {
+	if runtime.GOOS == "windows" || uid < 0 {
+		return
+	}
+	_ = os.Chown(path, uid, gid)
 }
