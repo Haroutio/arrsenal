@@ -14,7 +14,7 @@ hardware transcoding enabled — before you've opened a single web UI.
 Most stack installers stop at "containers running." Finishing the configuration is the
 whole point of this one.
 
-> **Status: the auto-wiring is here.** **v0.2 is out**: one command installs the stack
+> **Status: v0.3 is out.** One command installs the stack
 > *and* connects it — Prowlarr knows your arrs, every arr has its download client and
 > root folders, SABnzbd's docker gotchas (host whitelist, folder layout, categories) are
 > repaired automatically, Jellyfin's wizard completes with hardware transcoding
@@ -25,7 +25,7 @@ whole point of this one.
 
 ## What you get
 
-The v0.1 menu — pick any subset:
+The menu — pick any subset:
 
 | App | Role |
 |---|---|
@@ -33,7 +33,7 @@ The v0.1 menu — pick any subset:
 | [Plex](https://plex.tv) | Media server (hardware transcoding needs Plex Pass) |
 | [Emby](https://emby.media) | Media server (hardware transcoding needs Emby Premiere) |
 | [Overseerr](https://overseerr.dev) | Requests for Plex |
-| [Jellyseerr](https://github.com/fallenbagel/jellyseerr) | Requests |
+| [Jellyseerr](https://docs.seerr.dev) | Requests |
 | [Prowlarr](https://prowlarr.com) | Indexer manager |
 | [Sonarr](https://sonarr.tv) | TV |
 | [Radarr](https://radarr.video) | Movies |
