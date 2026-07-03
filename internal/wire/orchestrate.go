@@ -3,9 +3,12 @@ package wire
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
+	"github.com/Haroutio/arrsenal/internal/quality"
 	"github.com/Haroutio/arrsenal/internal/registry"
 )
 
@@ -31,6 +34,13 @@ type Spec struct {
 	// QBitHost is qBittorrent's name on the bridge: "qbittorrent" normally,
 	// "gluetun" when the VPN owns its network namespace (issue #27).
 	QBitHost string
+
+	// TRaSH enables the Recyclarr quality sync (issue #60): Orchestrate
+	// writes the config (it holds the keys) and calls RunRecyclarr, which
+	// the cmd layer wires to a one-shot container run.
+	TRaSH        *quality.Answers
+	RecyclarrDir string // where recyclarr.yml lands (0600)
+	RunRecyclarr func() (output string, err error)
 
 	KeyTimeout time.Duration // how long to wait for each app's key
 }
@@ -226,11 +236,65 @@ func Orchestrate(ctx context.Context, spec Spec) []Result {
 			HomepageServices(BuildHomepageServices(inputs)), 0o600, "Homepage ← service widgets"))
 	}
 
+	// 6.5 TRaSH quality sync (issue #60): a CONVERGENT step — Recyclarr
+	// pushes the guide profiles into the arrs every pass; ↻ is its verdict.
+	if spec.TRaSH != nil && spec.RunRecyclarr != nil {
+		results = append(results, runTRaSH(spec, keys)...)
+	}
+
 	// 7. Jellyseerr, best effort, last.
 	if _, ok := sel["jellyseerr"]; ok {
 		results = append(results, EnsureJellyseerr(ctx, spec.Access("jellyseerr"), spec.Access("jellyseerr")))
 	}
 
+	return results
+}
+
+func runTRaSH(spec Spec, keys map[string]string) []Result {
+	conn := "TRaSH quality profiles (Recyclarr)"
+	var sonarr, radarr *quality.Instance
+	if k := keys["sonarr"]; k != "" {
+		sonarr = &quality.Instance{BaseURL: "http://sonarr:8989", APIKey: k}
+	}
+	if k := keys["radarr"]; k != "" {
+		radarr = &quality.Instance{BaseURL: "http://radarr:7878", APIKey: k}
+	}
+
+	cfg, err := quality.RecyclarrConfig(*spec.TRaSH, sonarr, radarr)
+	if err != nil {
+		return []Result{{Connection: conn, Outcome: OutcomeFailed,
+			Detail: fmt.Sprintf("building recyclarr config: %v", err)}}
+	}
+	// Arrsenal-owned and key-bearing: regenerated every run, 0600.
+	path := filepath.Join(spec.RecyclarrDir, "recyclarr.yml")
+	if err := os.MkdirAll(spec.RecyclarrDir, 0o755); err != nil {
+		return []Result{{Connection: conn, Outcome: OutcomeFailed, Detail: err.Error()}}
+	}
+	if err := os.WriteFile(path, cfg, 0o600); err != nil {
+		return []Result{{Connection: conn, Outcome: OutcomeFailed,
+			Detail: fmt.Sprintf("writing %s: %v", path, err)}}
+	}
+
+	out, err := spec.RunRecyclarr()
+	// Never let an echoed key reach the report.
+	for _, k := range keys {
+		out = strings.ReplaceAll(out, k, "[redacted]")
+	}
+	if err != nil {
+		tail := out
+		if len(tail) > 600 {
+			tail = tail[len(tail)-600:]
+		}
+		return []Result{{Connection: conn, Outcome: OutcomeFailed,
+			Detail: fmt.Sprintf("recyclarr sync failed: %v\n%s", err, tail)}}
+	}
+	var results []Result
+	if sonarr != nil {
+		results = append(results, Result{Connection: "Sonarr ← TRaSH quality profiles", Outcome: OutcomeSynced})
+	}
+	if radarr != nil {
+		results = append(results, Result{Connection: "Radarr ← TRaSH quality profiles", Outcome: OutcomeSynced})
+	}
 	return results
 }
 

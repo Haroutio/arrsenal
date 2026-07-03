@@ -43,6 +43,25 @@ func (d *Docker) Up(artifactsDir string, services ...string) error {
 	return nil
 }
 
+// RunOneShot runs a container to completion and removes it, returning its
+// combined output (Recyclarr sync, issue #60). user is uid:gid ("" = image
+// default); binds are host:container mount specs.
+func (d *Docker) RunOneShot(image, network, user string, binds []string, args ...string) (string, error) {
+	cmd := []string{"run", "--rm"}
+	if network != "" {
+		cmd = append(cmd, "--network", network)
+	}
+	if user != "" {
+		cmd = append(cmd, "--user", user)
+	}
+	for _, b := range binds {
+		cmd = append(cmd, "-v", b)
+	}
+	cmd = append(cmd, image)
+	cmd = append(cmd, args...)
+	return d.run(cmd...)
+}
+
 // Down stops and removes the stack's containers and network. Bind-mounted
 // data (appdata, media) is untouched by construction — compose down never
 // deletes host paths.
