@@ -70,6 +70,27 @@ const (
 	SourceHost SourceKind = "host"
 )
 
+// KeyFormat says how an app's self-generated API key is stored on disk.
+type KeyFormat string
+
+// Key formats. Apps own their keys; Arrsenal reads them post-boot
+// (DESIGN.md §7.2) — the same code path serves fresh installs and
+// brownfield-adopted configs.
+const (
+	// KeyNone means no readable key (the app is wired differently or not at all).
+	KeyNone KeyFormat = ""
+	// KeyXMLApiKey: <ApiKey> element in a config.xml (the arr family).
+	KeyXMLApiKey KeyFormat = "xml-apikey"
+	// KeyINIApiKey: api_key entry in an ini file (SABnzbd).
+	KeyINIApiKey KeyFormat = "ini-apikey"
+)
+
+// KeySource locates an app's self-generated key inside its appdata dir.
+type KeySource struct {
+	File   string // relative to <appdata>/<app ID>
+	Format KeyFormat
+}
+
 // Mount is one bind mount, symbolic on the host side.
 type Mount struct {
 	Kind     SourceKind
@@ -107,6 +128,7 @@ type App struct {
 	ExtraPorts []PortMap // anything beyond the web UI (torrent inbound, discovery)
 	Env        map[string]string
 	Mounts     []Mount
+	Key        KeySource // where the app's self-generated API key lands
 	WiringTier WiringTier
 	BootPhase  BootPhase
 	GPU        bool     // can take the transcode device (DESIGN.md §8)
