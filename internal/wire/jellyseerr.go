@@ -23,8 +23,8 @@ import (
 // configured instance untouched, and for a fresh one point the user at its
 // own wizard. Never block the run.
 func EnsureJellyseerr(ctx context.Context, url, hostAccessURL string) Result {
-	conn := "Jellyseerr requests"
-	// Best-effort: never stall the run on a Jellyseerr that may be down.
+	conn := "Seerr requests"
+	// Best-effort: never stall the run on a Seerr that may be down.
 	c := NewClient(url, "", "").WithRetry(2, 500*time.Millisecond)
 
 	// The public settings endpoint needs no auth and reports init state.
@@ -33,7 +33,7 @@ func EnsureJellyseerr(ctx context.Context, url, hostAccessURL string) Result {
 	}
 	if err := c.GetJSON(ctx, "/api/v1/settings/public", &pub); err != nil {
 		return Result{Connection: conn, Outcome: OutcomeManual,
-			Detail:      fmt.Sprintf("could not reach Jellyseerr to check its setup (%v) — finish it at its web UI", err),
+			Detail:      fmt.Sprintf("could not reach Seerr to check its setup (%v) — finish it at its web UI", err),
 			FallbackURL: hostAccessURL}
 	}
 	if pub.Initialized {
@@ -41,7 +41,7 @@ func EnsureJellyseerr(ctx context.Context, url, hostAccessURL string) Result {
 			Detail: "already set up — left as configured"}
 	}
 	return Result{Connection: conn, Outcome: OutcomeManual,
-		Detail: "installed and running — finish its 2-minute setup wizard (sign in with your Jellyfin or Plex account, " +
+		Detail: "installed and running — finish its 2-minute setup wizard (sign in with your Jellyfin, Plex or Emby account, " +
 			"then add Sonarr/Radarr); it cannot be automated because that sign-in needs a browser",
 		FallbackURL: hostAccessURL}
 }

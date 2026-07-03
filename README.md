@@ -80,9 +80,9 @@ library part. Each one does a single job:
   torrents (free, but you'll want the VPN option); many people run both.
 - **Jellyfin**, **Plex** or **Emby** is the part your TV sees: the streaming interface
   for watching your library at home or away.
-- Around the edges: **Bazarr** fetches subtitles, **Jellyseerr**/**Overseerr** give
-  your family a simple "request a movie" page, and **Homepage** puts every service on
-  one dashboard.
+- Around the edges: **Bazarr** fetches subtitles, **Seerr** gives your family a
+  simple "request a movie" page, and **Homepage** puts every service on one
+  dashboard.
 
 The chore is introducing all of these to each other: half a dozen API keys to copy
 around, download folders that have to line up exactly between apps, categories, root
@@ -145,8 +145,8 @@ installs: `sudo arrsenal --yes --apps sonarr,radarr,... --admin-pass ...`
 | [SABnzbd](https://sabnzbd.org) | Usenet download client |
 | [qBittorrent](https://www.qbittorrent.org) | Torrent download client |
 | [Bazarr](https://www.bazarr.media) | Subtitles |
-| [Jellyseerr](https://docs.seerr.dev) | Requests (pairs with Jellyfin/Emby) |
-| [Overseerr](https://overseerr.dev) | Requests (pairs with Plex) |
+| [Seerr](https://docs.seerr.dev) | Requests — works with Jellyfin, Plex and Emby |
+| [Overseerr](https://overseerr.dev) | Requests (superseded upstream: merged into Seerr) |
 | [Homepage](https://gethomepage.dev) | Dashboard, widgets pre-wired |
 
 Jellyfin is the recommended media server because its hardware transcoding — using
