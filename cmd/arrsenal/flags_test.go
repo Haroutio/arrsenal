@@ -45,6 +45,31 @@ func TestParseFlagsVersionShortCircuits(t *testing.T) {
 	}
 }
 
+func TestNonTTYWithoutYesFailsWithInstructions(t *testing.T) {
+	// go test runs without a TTY on stdin — exactly the scripted case.
+	o := parseFlags([]string{}, os.Stdout)
+	err := run(*o)
+	if err == nil {
+		t.Fatal("interactive mode without a terminal must fail, not hang")
+	}
+	for _, want := range []string{"--yes", "--help", "no terminal"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error should mention %q: %v", want, err)
+		}
+	}
+}
+
+func TestHeadlessFlagsCoverAllStateKnobs(t *testing.T) {
+	o := parseFlags([]string{
+		"--yes", "--apps", "sonarr",
+		"--downloads-root", "/mnt/nvme/dl",
+		"--jellyfin-host-network",
+	}, os.Stdout)
+	if o.downloadsRoot != "/mnt/nvme/dl" || !o.jellyfinHostNet {
+		t.Fatalf("parsed: %+v", o)
+	}
+}
+
 func TestUpdateRefusesWithoutState(t *testing.T) {
 	o := parseFlags([]string{"--state", "/nonexistent/dir/arrsenal.yaml"}, os.Stdout)
 	err := runUpdate(*o)

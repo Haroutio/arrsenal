@@ -61,6 +61,14 @@ jobs:
               sleep $((attempt * 20))
             done
           done
+      - name: without --yes and without a TTY, it fails with instructions (never hangs)
+        run: |
+          set +e
+          out=$(./arrsenal --state /tmp/never/arrsenal.yaml 2>&1)
+          code=$?
+          set -e
+          [ "$code" -ne 0 ] || (echo "must fail without a TTY" && exit 1)
+          echo "$out" | grep -q -- "--yes" || (echo "error must point at --yes: $out" && exit 1)
       - name: headless install brings the stack up AND wires it
         run: |
           ./arrsenal --yes --apps prowlarr,sonarr,sabnzbd --gpu none \

@@ -24,6 +24,14 @@ import (
 )
 
 func run(o options) error {
+	// Non-interactive sessions must fail with instructions, never hang on a
+	// TUI that has no terminal to draw on (DESIGN §10).
+	if !o.yes && !term.IsTerminal(int(os.Stdin.Fd())) {
+		return errors.New("no terminal attached — for scripted use run with --yes and flags, e.g.\n" +
+			"  arrsenal --yes --apps sonarr,radarr,prowlarr,sabnzbd --admin-pass ... [--data-root ... --downloads-root ... --gpu ...]\n" +
+			"see arrsenal --help for every option")
+	}
+
 	s, fresh, err := loadOrNewState(o.statePath)
 	if err != nil {
 		return err
@@ -63,6 +71,12 @@ func applyFlagOverrides(s *state.State, o options, fresh bool) {
 	}
 	if o.umask != "" {
 		s.Umask = o.umask
+	}
+	if o.downloadsRoot != "" {
+		s.DownloadsRoot = o.downloadsRoot
+	}
+	if o.jellyfinHostNet {
+		s.JellyfinHostNetwork = true
 	}
 	if o.tz != "" && (fresh || o.yes) {
 		s.TZ = o.tz
