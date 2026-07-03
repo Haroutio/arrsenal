@@ -79,9 +79,12 @@ func (m SplashModel) Quit() bool { return m.quit }
 
 // shipFits: the galleon sails uncut or not at all (91 cols of art plus
 // margin, and the full composition needs the rows). No trimming — cutting
-// to 64 cols would amputate the stern rigging.
+// to 64 cols would amputate the stern rigging. The row count is exact:
+// with the ship, View renders 41 lines (an overflowing frame clips from
+// the TOP, which would eat the wordmark — the select menu learned that
+// the hard way).
 func (m SplashModel) shipFits() bool {
-	return m.width >= 95 && m.height >= 42
+	return m.width >= 95 && m.height >= 41
 }
 
 func (m SplashModel) shipTotal() int { return len(shipArt) + waveRows }
@@ -167,7 +170,7 @@ func (m *SplashModel) advance() {
 func (m SplashModel) View() string {
 	var b strings.Builder
 
-	b.WriteString(styleFaint.Render(ambient) + "\n\n")
+	b.WriteString(styleFaint.Render(ambient) + "\n")
 
 	// Wordmark, revealed left-to-right, with a light band sweeping across
 	// once fully revealed (the design's sweep, done with color instead of
@@ -193,13 +196,21 @@ func (m SplashModel) View() string {
 	}
 	b.WriteString(line + "\n")
 
-	if m.shipFits() && m.shipN > 0 {
-		b.WriteString("\n" + m.renderShip())
+	// The ship canvas is reserved from the first frame (hidden rows render
+	// blank) so the layout never jumps as she rises.
+	if m.shipFits() {
+		b.WriteString(m.renderShip())
+	} else {
+		b.WriteString("\n")
 	}
 
 	// System check.
-	b.WriteString("\n" + styleKey.Render("§ SYSTEM CHECK ") + styleFaint.Render(strings.Repeat("─", 33)) + "\n")
-	for i := 0; i < m.shownRows && i < len(m.rows); i++ {
+	b.WriteString(styleKey.Render("§ SYSTEM CHECK ") + styleFaint.Render(strings.Repeat("─", 33)) + "\n")
+	for i := 0; i < len(m.rows); i++ {
+		if i >= m.shownRows {
+			b.WriteString("\n") // reserved: rows stream into a fixed canvas
+			continue
+		}
 		r := m.rows[i]
 		row := styleKey.Render("▸ ") + styleShipHull.Render(fmt.Sprintf("%-9s", r.Label)) + styleDim.Render(r.Value)
 		if r.OK {
