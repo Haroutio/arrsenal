@@ -14,10 +14,14 @@ hardware transcoding enabled — before you've opened a single web UI.
 Most stack installers stop at "containers running." Finishing the configuration is the
 whole point of this one.
 
-> **Status: early.** **v0.1 is out** and covers install through `docker compose up` —
-> the TUI, preflight, generation, and bring-up. The auto-wiring described above is the
-> **v0.2** milestone, in progress now; until it lands you connect the apps to each other
-> the classic way. Follow the [milestones](../../milestones) to watch it arrive.
+> **Status: the auto-wiring is here.** **v0.2 is out**: one command installs the stack
+> *and* connects it — Prowlarr knows your arrs, every arr has its download client and
+> root folders, SABnzbd's docker gotchas (host whitelist, folder layout, categories) are
+> repaired automatically, Jellyfin's wizard completes with hardware transcoding
+> configured, and the run ends in a wiring report. Every connection is idempotent:
+> re-runs and existing configs are never clobbered — verified in CI on every change.
+> The one deliberately manual step: Jellyseerr's 2-minute sign-in wizard (it requires a
+> browser login by design).
 
 ## What you get
 
@@ -44,7 +48,7 @@ Emby Premiere. Jellyfin's does not; that's why it's the flagship path.
 
 ```bash
 # Release-pinned, checksum-verified:
-curl -fsSL https://raw.githubusercontent.com/Haroutio/arrsenal/v0.1.0/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Haroutio/arrsenal/v0.2.0/install.sh | bash
 ```
 
 The bootstrap script detects your distro, offers to install Docker if it's missing
@@ -54,14 +58,30 @@ your architecture, verifies its SHA-256 checksum, and hands over to the TUI.
 Prefer to read before you run? Good instinct:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Haroutio/arrsenal/v0.1.0/install.sh -o install.sh
+curl -fsSL https://raw.githubusercontent.com/Haroutio/arrsenal/v0.2.0/install.sh -o install.sh
 less install.sh
 bash install.sh
 ```
 
 Re-run `sudo arrsenal` any time to add or remove apps — your answers persist in
-`/opt/arrsenal/arrsenal.yaml`, and Compose reconciles the difference. Headless use:
-`arrsenal --yes --apps sonarr,radarr,... ` (see `arrsenal --help`).
+`/opt/arrsenal/arrsenal.yaml`, Compose reconciles the difference, and the wiring pass
+only ever adds what's missing. Headless use:
+`arrsenal --yes --apps sonarr,radarr,... --admin-pass ...` (see `arrsenal --help`).
+
+A run ends like this:
+
+```
+Wiring report:
+  ✓ SABnzbd ← host whitelist "sabnzbd"
+  ✓ SABnzbd ← download folders under /data/usenet
+  ✓ SABnzbd ← category "tv"
+  ✓ Sonarr ← admin credential
+  ✓ Prowlarr → Sonarr
+  ✓ Sonarr → SABnzbd
+  ✓ Sonarr root folder /data/media/tv
+
+  7 wired
+```
 
 ## Design principles
 
@@ -97,12 +117,12 @@ Re-run `sudo arrsenal` any time to add or remove apps — your answers persist i
 
 ## Roadmap
 
-| Milestone | Theme |
-|---|---|
-| v0.1 | It installs: TUI, preflight, generation, `up -d` |
-| v0.2 | The killer feature: full API auto-wiring |
-| v0.3 | Media-server choice (Plex/Emby), VPN, update/uninstall, headless mode |
-| v1.0 | Stable: docs, hardening, schema stability |
+| Milestone | Theme | |
+|---|---|---|
+| v0.1 | It installs: TUI, preflight, generation, `up -d` | ✅ |
+| v0.2 | The killer feature: full API auto-wiring | ✅ |
+| v0.3 | Media-server choice (Plex/Emby), VPN, update/uninstall, flexible storage, TRaSH quality profiles | next |
+| v1.0 | Stable: docs, hardening, schema stability | |
 
 Full architecture and every design decision (with reasoning): [docs/DESIGN.md](docs/DESIGN.md).
 
