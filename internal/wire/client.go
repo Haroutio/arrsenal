@@ -25,6 +25,8 @@ type Client struct {
 	// text that could reach a human — request bodies carry passwords, and
 	// servers echo bodies into errors more often than they should.
 	redactions []string
+	// headers are static extras sent on every request.
+	headers map[string]string
 
 	// retry policy; fixed defaults, overridable in tests
 	attempts int
@@ -39,6 +41,16 @@ func (c *Client) WithRedaction(secrets ...string) *Client {
 			c.redactions = append(c.redactions, s)
 		}
 	}
+	return c
+}
+
+// WithHeader sets a static header on every request (Jellyfin's
+// X-Emby-Authorization identity, for example).
+func (c *Client) WithHeader(name, value string) *Client {
+	if c.headers == nil {
+		c.headers = map[string]string{}
+	}
+	c.headers[name] = value
 	return c
 }
 
@@ -110,6 +122,9 @@ func (c *Client) do(ctx context.Context, method, path string, body, out any) err
 		}
 		if c.header != "" {
 			req.Header.Set(c.header, c.key)
+		}
+		for name, value := range c.headers {
+			req.Header.Set(name, value)
 		}
 
 		resp, err := c.http.Do(req)
