@@ -57,7 +57,7 @@ func TestEnsureAuthConfiguresFreshApps(t *testing.T) {
 	srv := f.server(t)
 	defer srv.Close()
 
-	r := EnsureAuth(context.Background(), authClient(srv.URL), "Sonarr", "harout", adminPass, false)
+	r := EnsureAuth(context.Background(), authClient(srv.URL), "Sonarr", "/api/v3", "harout", adminPass, false)
 	if r.Outcome != OutcomeWired {
 		t.Fatalf("fresh app must be wired: %+v", r)
 	}
@@ -78,7 +78,7 @@ func TestEnsureAuthLeavesConfiguredAppsAlone(t *testing.T) {
 	srv := f.server(t)
 	defer srv.Close()
 
-	r := EnsureAuth(context.Background(), authClient(srv.URL), "Sonarr", "harout", adminPass, false)
+	r := EnsureAuth(context.Background(), authClient(srv.URL), "Sonarr", "/api/v3", "harout", adminPass, false)
 	if r.Outcome != OutcomeExisted || f.puts.Load() != 0 {
 		t.Fatalf("already-authed app must see zero writes: %+v puts=%d", r, f.puts.Load())
 	}
@@ -91,7 +91,7 @@ func TestEnsureAuthNeverTouchesAdoptedConfigs(t *testing.T) {
 	srv := f.server(t)
 	defer srv.Close()
 
-	r := EnsureAuth(context.Background(), authClient(srv.URL), "Sonarr", "harout", adminPass, true)
+	r := EnsureAuth(context.Background(), authClient(srv.URL), "Sonarr", "/api/v3", "harout", adminPass, true)
 	if r.Outcome != OutcomeExisted || f.puts.Load() != 0 {
 		t.Fatalf("adopted none-auth must be preserved: %+v puts=%d", r, f.puts.Load())
 	}
@@ -114,7 +114,7 @@ func TestEnsureAuthFailureNeverLeaksThePassword(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	r := EnsureAuth(context.Background(), authClient(srv.URL), "Sonarr", "harout", adminPass, false)
+	r := EnsureAuth(context.Background(), authClient(srv.URL), "Sonarr", "/api/v3", "harout", adminPass, false)
 	if r.Outcome != OutcomeFailed {
 		t.Fatalf("expected failure: %+v", r)
 	}

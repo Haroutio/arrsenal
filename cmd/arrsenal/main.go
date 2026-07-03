@@ -39,6 +39,9 @@ type options struct {
 	statePath    string
 	artifactsDir string
 	skipUp       bool
+	skipWiring   bool
+	adminUser    string
+	adminPass    string
 }
 
 // parseFlags returns nil when the invocation was informational (--version).
@@ -60,6 +63,9 @@ func parseFlags(args []string, out *os.File) *options {
 	fs.StringVar(&o.statePath, "state", state.DefaultPath, "state file location")
 	fs.StringVar(&o.artifactsDir, "artifacts-dir", "", "where compose/.env land (default: state file's directory)")
 	fs.BoolVar(&o.skipUp, "skip-up", false, "generate artifacts but do not run docker compose up")
+	fs.BoolVar(&o.skipWiring, "skip-wiring", false, "bring containers up but skip the API auto-wiring pass")
+	fs.StringVar(&o.adminUser, "admin-user", "admin", "admin username applied to the apps during wiring")
+	fs.StringVar(&o.adminPass, "admin-pass", "", "admin password for wiring (headless; interactive mode prompts)")
 	_ = fs.Parse(args)
 
 	if *showVersion {

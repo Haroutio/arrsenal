@@ -26,9 +26,17 @@ func defaultRunnerIn(dir string, args ...string) (string, error) {
 // Up runs the reconciliation: `docker compose up -d --remove-orphans` in the
 // artifacts directory. Compose itself is the declarative engine — deselected
 // apps' containers are removed, changed services recreated (DESIGN.md §1);
-// Arrsenal adds nothing on top.
-func (d *Docker) Up(artifactsDir string) error {
-	_, err := d.runIn(artifactsDir, "compose", "up", "-d", "--remove-orphans")
+// Arrsenal adds nothing on top. With services given, only those are brought
+// up (boot phases, §7.5: core first, tail after their configs exist) —
+// scoped invocations skip --remove-orphans so reconciliation happens exactly
+// once, on the final full up.
+func (d *Docker) Up(artifactsDir string, services ...string) error {
+	args := []string{"compose", "up", "-d"}
+	if len(services) == 0 {
+		args = append(args, "--remove-orphans")
+	}
+	args = append(args, services...)
+	_, err := d.runIn(artifactsDir, args...)
 	if err != nil {
 		return fmt.Errorf("bring-up failed: %w", err)
 	}

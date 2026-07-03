@@ -14,7 +14,10 @@ import (
 // notice). Their auth state — including a deliberate "none" — is the user's
 // configuration and is never modified; only method "none" on an app
 // Arrsenal itself created counts as "not yet set up".
-func EnsureAuth(ctx context.Context, c *Client, appName, username, password string, adopted bool) Result {
+//
+// apiBase is the arr-family prefix: "/api/v3" for the PVRs, "/api/v1" for
+// Prowlarr — same host-config resource, different mount point.
+func EnsureAuth(ctx context.Context, c *Client, appName, apiBase, username, password string, adopted bool) Result {
 	conn := fmt.Sprintf("%s ← admin credential", appName)
 	c.WithRedaction(password) // the body carries it; echoes must not
 
@@ -22,7 +25,7 @@ func EnsureAuth(ctx context.Context, c *Client, appName, username, password stri
 	// way: only the auth keys change, every other field — including ones
 	// added by arr versions newer than this binary — rides through intact.
 	var host map[string]any
-	if err := c.GetJSON(ctx, "/api/v3/config/host", &host); err != nil {
+	if err := c.GetJSON(ctx, apiBase+"/config/host", &host); err != nil {
 		return Result{Connection: conn, Outcome: OutcomeFailed,
 			Detail: fmt.Sprintf("reading host config: %v", err)}
 	}
@@ -42,7 +45,7 @@ func EnsureAuth(ctx context.Context, c *Client, appName, username, password stri
 	host["password"] = password
 	host["passwordConfirmation"] = password
 
-	path := "/api/v3/config/host"
+	path := apiBase + "/config/host"
 	if id, ok := host["id"]; ok {
 		path = fmt.Sprintf("%s/%v", path, id)
 	}

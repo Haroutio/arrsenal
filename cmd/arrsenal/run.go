@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"net"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"golang.org/x/term"
 
 	"github.com/Haroutio/arrsenal/internal/dockerx"
 	"github.com/Haroutio/arrsenal/internal/generate"
@@ -18,6 +20,7 @@ import (
 	"github.com/Haroutio/arrsenal/internal/registry"
 	"github.com/Haroutio/arrsenal/internal/state"
 	"github.com/Haroutio/arrsenal/internal/tui"
+	"github.com/Haroutio/arrsenal/internal/wire"
 )
 
 func run(o options) error {
@@ -31,7 +34,7 @@ func run(o options) error {
 		if err := headlessFill(s, o); err != nil {
 			return err
 		}
-	} else if err := interactiveFill(s, o); err != nil {
+	} else if err := interactiveFill(s, &o); err != nil {
 		return err
 	}
 
@@ -93,8 +96,9 @@ func headlessFill(s *state.State, o options) error {
 	return s.Validate()
 }
 
-// interactiveFill drives the TUI screens in order, writing into the state.
-func interactiveFill(s *state.State, o options) error {
+// interactiveFill drives the TUI screens in order, writing into the state
+// (and the wiring credential into the options).
+func interactiveFill(s *state.State, o *options) error {
 	// 1. App selection.
 	sel := tui.NewSelect(s.Apps)
 	if err := runScreen(&selectAdapter{&sel}); err != nil {
@@ -132,7 +136,24 @@ func interactiveFill(s *state.State, o options) error {
 	}
 	paths.Apply(s)
 
-	// 4. GPU: an explicit --gpu flag outranks detection entirely; otherwise
+	// 4. The admin credential the wiring pass applies everywhere — collected
+	// once, used, never persisted (DESIGN §9.2). Enter skips wiring auth
+	// (those steps become manual report lines).
+	if o.adminPass == "" {
+		fmt.Printf("Admin username for the apps [%s]: ", o.adminUser)
+		if line, err := bufio.NewReader(os.Stdin).ReadString('\n'); err == nil {
+			if v := strings.TrimSpace(line); v != "" {
+				o.adminUser = v
+			}
+		}
+		fmt.Print("Admin password (applied to every app; enter to skip auto-setup): ")
+		if pw, err := term.ReadPassword(int(os.Stdin.Fd())); err == nil {
+			o.adminPass = string(pw)
+		}
+		fmt.Println()
+	}
+
+	// 5. GPU: an explicit --gpu flag outranks detection entirely; otherwise
 	// detection proposes and the user disposes — including a manual pick
 	// when the probes miss hardware the machine's owner knows is there.
 	if o.gpu != "" {
@@ -244,6 +265,29 @@ func pipeline(s *state.State, o options) error {
 		fmt.Println("warning:", se.Warning)
 	}
 
+	// qBittorrent's pre-seed happens BEFORE its first start (DESIGN §7):
+	// generate + persist the password, write the config only if absent.
+	if selectedID(s, "qbittorrent") {
+		if s.Secrets.QBittorrentPassword == "" {
+			pw, err := wire.GeneratePassword()
+			if err != nil {
+				return fmt.Errorf("generating qBittorrent password: %w", err)
+			}
+			s.Secrets.QBittorrentPassword = pw
+			if err := s.Save(o.statePath); err != nil {
+				return err
+			}
+		}
+		conf, err := wire.QBitConfig(s.Secrets.QBittorrentPassword)
+		if err != nil {
+			return fmt.Errorf("rendering qBittorrent pre-seed: %w", err)
+		}
+		r := wire.WriteTailConfig(
+			filepath.Join(s.AppdataRoot, "qbittorrent", "qBittorrent", "qBittorrent.conf"),
+			conf, 0o600, "qBittorrent ← pre-seeded WebUI password")
+		fmt.Printf("%s: %s %s\n", r.Connection, r.Outcome, r.Detail)
+	}
+
 	artifacts, err := generate.Render(s, o.statePath)
 	if err != nil {
 		return err
@@ -261,26 +305,142 @@ func pipeline(s *state.State, o options) error {
 		return nil
 	}
 
-	fmt.Println("bringing the stack up…")
-	if err := docker.Up(o.artifactsDir); err != nil {
+	// Boot phases (DESIGN §7.5): core apps first — their keys and APIs feed
+	// the wiring — then tail apps once their configs exist on disk.
+	core, tail := partitionByPhase(s)
+	fmt.Println("bringing the core apps up…")
+	if err := docker.Up(o.artifactsDir, core...); err != nil {
 		return err
 	}
-	results := docker.WaitReady(s.Apps, 3*time.Minute, 2*time.Second)
-	failed := 0
+	ready := docker.WaitReady(core, 3*time.Minute, 2*time.Second)
+	printReadiness(ready)
+
+	var wiring []wire.Result
+	if !o.skipWiring {
+		fmt.Println("wiring the stack together…")
+		wiring = wire.Orchestrate(context.Background(), buildSpec(s, o, conflictsAdopted(conflicts)))
+	}
+
+	if len(tail) > 0 {
+		fmt.Println("bringing the remaining apps up…")
+	}
+	if err := docker.Up(o.artifactsDir); err != nil { // full up reconciles
+		return err
+	}
+	if len(tail) > 0 {
+		printReadiness(docker.WaitReady(tail, 3*time.Minute, 2*time.Second))
+	}
+
+	if len(wiring) > 0 {
+		fmt.Print(wire.RenderReport(wiring))
+	}
+	printAccessTable(s)
+
+	unready := 0
+	for _, r := range ready {
+		if !r.Ready {
+			unready++
+		}
+	}
+	if unready > 0 {
+		return fmt.Errorf("%d containers did not become ready", unready)
+	}
+	if wire.Failed(wiring) {
+		return fmt.Errorf("some connections could not be wired — see the report above")
+	}
+	fmt.Println("done — the stack is up and wired. Re-run arrsenal any time to add or remove apps.")
+	return nil
+}
+
+func selectedID(s *state.State, id string) bool {
+	for _, a := range s.Apps {
+		if a == id {
+			return true
+		}
+	}
+	return false
+}
+
+func partitionByPhase(s *state.State) (core, tail []string) {
+	for _, id := range s.Apps {
+		app, ok := registry.ByID(id)
+		if ok && app.BootPhase == registry.BootTail {
+			tail = append(tail, id)
+			continue
+		}
+		core = append(core, id)
+	}
+	return core, tail
+}
+
+func printReadiness(results []dockerx.ReadyResult) {
 	for _, r := range results {
 		if r.Ready {
 			fmt.Printf("  ✓ %s\n", r.App)
 		} else {
-			failed++
 			fmt.Printf("  ✗ %s\n", r.Detail)
 		}
 	}
-	printAccessTable(s)
-	if failed > 0 {
-		return fmt.Errorf("%d of %d containers did not become ready", failed, len(results))
+}
+
+// conflictsAdopted extracts the adoption notices the scan produced: those
+// apps' configs predate this run, and the wiring engine treats their
+// settings as the user's (DESIGN §4, §7).
+func conflictsAdopted(conflicts []preflight.Conflict) map[string]bool {
+	adopted := map[string]bool{}
+	for _, c := range conflicts {
+		if c.Kind == preflight.KindAppdata {
+			adopted[c.App] = true
+		}
 	}
-	fmt.Println("done — the stack is up. Re-run arrsenal any time to add or remove apps.")
-	return nil
+	return adopted
+}
+
+func buildSpec(s *state.State, o options, adopted map[string]bool) wire.Spec {
+	var apps []registry.App
+	for _, id := range s.Apps {
+		if a, ok := registry.ByID(id); ok {
+			apps = append(apps, a)
+		}
+	}
+	qbitContainer := 0
+	if qb, ok := registry.ByID("qbittorrent"); ok {
+		_, qbitContainer = s.WebPorts(qb)
+	}
+	return wire.Spec{
+		Apps:        apps,
+		Adopted:     adopted,
+		AppdataRoot: s.AppdataRoot,
+		AdminUser:   o.adminUser,
+		AdminPass:   o.adminPass,
+		QBitPass:    s.Secrets.QBittorrentPassword,
+		HWAccel:     hwAccelFor(s.GPU),
+		Access: func(id string) string {
+			app, ok := registry.ByID(id)
+			if !ok {
+				return ""
+			}
+			port := s.WebHostPort(app)
+			if s.HostNetworked(id) {
+				port = app.Web.Container
+			}
+			return fmt.Sprintf("http://127.0.0.1:%d", port)
+		},
+		QBitContainerPort: qbitContainer,
+	}
+}
+
+func hwAccelFor(mode state.GPUMode) string {
+	switch mode {
+	case state.GPUNvidia:
+		return "nvenc"
+	case state.GPUIntel:
+		return "qsv"
+	case state.GPUAMD:
+		return "vaapi"
+	default:
+		return ""
+	}
 }
 
 // printAccessTable is the payoff moment: where everything lives, as URLs.

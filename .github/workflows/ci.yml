@@ -54,31 +54,51 @@ jobs:
       # bursts; pre-pull with backoff so the product run never eats the flake.
       - name: pre-pull images with retry
         run: |
-          for image in lscr.io/linuxserver/sonarr:latest lscr.io/linuxserver/sabnzbd:latest; do
+          for image in lscr.io/linuxserver/prowlarr:latest lscr.io/linuxserver/sonarr:latest lscr.io/linuxserver/sabnzbd:latest; do
             for attempt in 1 2 3 4; do
               docker pull --quiet "$image" && break
               echo "pull $image failed (attempt $attempt), backing off…"
               sleep $((attempt * 20))
             done
           done
-      - name: headless install brings the stack up
+      - name: headless install brings the stack up AND wires it
         run: |
-          ./arrsenal --yes --apps sonarr,sabnzbd --gpu none \
+          ./arrsenal --yes --apps prowlarr,sonarr,sabnzbd --gpu none \
+            --admin-user ci --admin-pass ci-wiring-pass \
             --data-root /tmp/arrtest/data --appdata-root /tmp/arrtest/appdata \
             --state /tmp/arrtest/arrsenal.yaml --artifacts-dir /tmp/arrtest \
-            --puid "$(id -u)" --pgid "$(id -g)"
+            --puid "$(id -u)" --pgid "$(id -g)" | tee /tmp/first-run.log
       - name: containers are running
         run: |
           docker ps --format '{{.Names}} {{.Status}}'
-          docker ps --format '{{.Names}}' | grep -x sonarr
-          docker ps --format '{{.Names}}' | grep -x sabnzbd
-      - name: re-run is idempotent (state file drives it)
+          for c in prowlarr sonarr sabnzbd; do docker ps --format '{{.Names}}' | grep -x "$c"; done
+      - name: the killer feature actually wired — assert via the apps' own APIs
         run: |
-          ./arrsenal --yes --gpu none \
-            --state /tmp/arrtest/arrsenal.yaml --artifacts-dir /tmp/arrtest
+          SONK=$(sed -nE 's#.*<ApiKey>([^<]+)</ApiKey>.*#\1#p' /tmp/arrtest/appdata/sonarr/config.xml)
+          PROWK=$(sed -nE 's#.*<ApiKey>([^<]+)</ApiKey>.*#\1#p' /tmp/arrtest/appdata/prowlarr/config.xml)
+          echo "sonarr download clients:"
+          curl -sf -H "X-Api-Key: $SONK" http://localhost:8989/api/v3/downloadclient | tee /tmp/dc.json | grep -q '"name":"SABnzbd"'
+          echo "sonarr root folders:"
+          curl -sf -H "X-Api-Key: $SONK" http://localhost:8989/api/v3/rootfolder | grep -q '"/data/media/tv"'
+          echo "sonarr auth is forms:"
+          curl -sf -H "X-Api-Key: $SONK" http://localhost:8989/api/v3/config/host | grep -q '"authenticationMethod":"forms"'
+          echo "prowlarr knows sonarr:"
+          curl -sf -H "X-Api-Key: $PROWK" http://localhost:9696/api/v1/applications | grep -q '"name":"Sonarr"'
+          echo "sab whitelist repaired:"
+          grep -E '^host_whitelist' /tmp/arrtest/appdata/sabnzbd/sabnzbd.ini | grep -q sabnzbd
+          echo "sab folders on the data tree:"
+          grep -qE '^complete_dir = /data/usenet/complete' /tmp/arrtest/appdata/sabnzbd/sabnzbd.ini
+      - name: re-run is idempotent — everything comes back existed, nothing re-wired
+        run: |
+          ./arrsenal --yes --gpu none --admin-user ci --admin-pass ci-wiring-pass \
+            --state /tmp/arrtest/arrsenal.yaml --artifacts-dir /tmp/arrtest | tee /tmp/second-run.log
+          grep -q "existed" /tmp/second-run.log
+          if grep -q "✗" /tmp/second-run.log; then echo "re-run produced failures" && exit 1; fi
+          if grep -qE "^  ✓" /tmp/second-run.log; then echo "re-run re-wired something — idempotency broken" && exit 1; fi
       - name: deselecting an app removes its container, preserves its config
         run: |
-          ./arrsenal --yes --apps sonarr --gpu none \
+          ./arrsenal --yes --apps prowlarr,sonarr --gpu none \
+            --admin-user ci --admin-pass ci-wiring-pass \
             --state /tmp/arrtest/arrsenal.yaml --artifacts-dir /tmp/arrtest
           docker ps --format '{{.Names}}' | grep -x sonarr
           if docker ps -a --format '{{.Names}}' | grep -x sabnzbd; then
