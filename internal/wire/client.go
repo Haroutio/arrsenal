@@ -21,9 +21,25 @@ type Client struct {
 	header string // header carrying the key, e.g. X-Api-Key
 	http   *http.Client
 
+	// redactions are additional secrets (beyond the key) scrubbed from any
+	// text that could reach a human — request bodies carry passwords, and
+	// servers echo bodies into errors more often than they should.
+	redactions []string
+
 	// retry policy; fixed defaults, overridable in tests
 	attempts int
 	backoff  time.Duration
+}
+
+// WithRedaction registers extra secrets to scrub from error output. Callers
+// sending a secret in a request body MUST register it first.
+func (c *Client) WithRedaction(secrets ...string) *Client {
+	for _, s := range secrets {
+		if s != "" {
+			c.redactions = append(c.redactions, s)
+		}
+	}
+	return c
 }
 
 // NewClient builds a client for one app's API.
@@ -112,7 +128,7 @@ func (c *Client) do(ctx context.Context, method, path string, body, out any) err
 			lastErr = fmt.Errorf("%s %s: HTTP %d (transient)", method, path, resp.StatusCode)
 			continue
 		case resp.StatusCode >= 400:
-			return fmt.Errorf("%s %s: HTTP %d: %s", method, path, resp.StatusCode, redact(string(respBody), c.key))
+			return fmt.Errorf("%s %s: HTTP %d: %s", method, path, resp.StatusCode, c.redactAll(string(respBody)))
 		}
 
 		if out != nil {
@@ -125,11 +141,14 @@ func (c *Client) do(ctx context.Context, method, path string, body, out any) err
 	return fmt.Errorf("after %d attempts: %w", c.attempts, lastErr)
 }
 
-// redact strips a secret from text destined for humans. Belt and braces:
-// response bodies should never echo keys, but "should" is not a guarantee.
-func redact(s, secret string) string {
-	if secret == "" {
-		return s
+// redactAll strips every registered secret from text destined for humans.
+// Belt and braces: response bodies should never echo secrets, but "should"
+// is not a guarantee.
+func (c *Client) redactAll(s string) string {
+	for _, secret := range append([]string{c.key}, c.redactions...) {
+		if secret != "" {
+			s = strings.ReplaceAll(s, secret, "[redacted]")
+		}
 	}
-	return strings.ReplaceAll(s, secret, "[redacted]")
+	return s
 }
