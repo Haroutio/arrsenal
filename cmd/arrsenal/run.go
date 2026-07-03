@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -132,6 +133,16 @@ func headlessFill(s *state.State, o options) error {
 // interactiveFill drives the TUI screens in order, writing into the state
 // (and the wiring credential into the options).
 func interactiveFill(s *state.State, o *options) error {
+	// 0. The boot splash — the readout is real (the same probes preflight
+	// trusts), the galleon is morale. Any key skips.
+	splash := tui.NewSplash(displayVersion(), splashRows())
+	if err := runScreen(&splashAdapter{&splash}); err != nil {
+		return err
+	}
+	if splash.Quit() {
+		return errors.New("aborted")
+	}
+
 	// 1. App selection.
 	sel := tui.NewSelect(s.Apps)
 	if err := runScreen(&selectAdapter{&sel}); err != nil {
@@ -672,6 +683,65 @@ func confirm(q string, def bool) bool {
 func runScreen(m tea.Model) error {
 	_, err := tea.NewProgram(m).Run()
 	return err
+}
+
+type splashAdapter struct{ m *tui.SplashModel }
+
+func (a *splashAdapter) Init() tea.Cmd { return a.m.Init() }
+func (a *splashAdapter) View() string  { return a.m.View() }
+func (a *splashAdapter) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	next, cmd := a.m.Update(msg)
+	*a.m = next.(tui.SplashModel)
+	return a, cmd
+}
+
+// displayVersion normalizes the goreleaser stamp for the splash ("0.5.0" →
+// "v0.5.0"; local builds show "dev").
+func displayVersion() string {
+	if version == "dev" || strings.HasPrefix(version, "v") {
+		return version
+	}
+	return "v" + version
+}
+
+// splashRows gathers the boot readout: cheap, real probes only — the same
+// facts preflight verifies for real later. Failures are display states, not
+// errors; the splash never blocks an install.
+func splashRows() []tui.SplashRow {
+	rows := make([]tui.SplashRow, 0, 4)
+
+	host := "linux"
+	if b, err := os.ReadFile("/etc/os-release"); err == nil {
+		for _, l := range strings.Split(string(b), "\n") {
+			if v, ok := strings.CutPrefix(l, "PRETTY_NAME="); ok {
+				host = strings.Trim(v, `"`)
+			}
+		}
+	}
+	if out, err := exec.Command("uname", "-r").Output(); err == nil {
+		host += " · " + strings.TrimSpace(string(out))
+	}
+	rows = append(rows, tui.SplashRow{Label: "host", Value: host, OK: true})
+
+	if err := dockerx.New().Available(); err == nil {
+		rows = append(rows, tui.SplashRow{Label: "docker", Value: "engine + compose plugin", OK: true})
+	} else {
+		rows = append(rows, tui.SplashRow{Label: "docker", Value: "not detected"})
+	}
+
+	det := preflight.DetectGPU(preflight.DefaultGPUProbes())
+	gpu := tui.SplashRow{Label: "gpu", Value: string(det.Proposal), OK: det.Proposal != state.GPUNone}
+	if det.Proposal == state.GPUNone {
+		gpu.Value = "none detected"
+	}
+	rows = append(rows, gpu)
+
+	if mounts, err := preflight.ListMounts(); err == nil && len(mounts) > 0 {
+		m := mounts[0] // biggest free space first
+		rows = append(rows, tui.SplashRow{
+			Label: "storage", Value: fmt.Sprintf("%s · %s free", m.Target, preflight.HumanBytes(m.FreeBytes)), OK: true})
+	}
+	return rows
 }
 
 type selectAdapter struct{ m *tui.SelectModel }

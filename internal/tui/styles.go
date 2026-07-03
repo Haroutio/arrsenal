@@ -9,10 +9,13 @@ import (
 // One small palette, defined once. Screens compose these; nobody invents
 // colors inline. 256-color palette on purpose — it survives any ssh/tmux
 // TERM combination that a media box is realistically driven through.
+// Bright cyan is the app's glow — terminal-native and fits the sea the
+// galleon sails on; magenta is the Jolly Roger energy, reserved for the
+// cursor. Greens confirm, amber warns. 256-color throughout.
 var (
-	colAccent = lipgloss.Color("43")  // teal: brand, titles, focus
-	colCursor = lipgloss.Color("212") // pink: the cursor, nothing else
-	colOK     = lipgloss.Color("42")  // green: selected/on
+	colAccent = lipgloss.Color("45")  // cyan: brand, titles, focus
+	colCursor = lipgloss.Color("198") // magenta: the cursor, nothing else
+	colOK     = lipgloss.Color("84")  // green: selected/on/ok
 	colWarn   = lipgloss.Color("214") // amber: warnings
 	colDim    = lipgloss.Color("241")
 	colFaint  = lipgloss.Color("238")
@@ -27,6 +30,13 @@ var (
 	styleFaint    = lipgloss.NewStyle().Foreground(colFaint)
 	styleWarn     = lipgloss.NewStyle().Foreground(colWarn)
 	styleKey      = lipgloss.NewStyle().Foreground(colAccent)
+
+	// Splash-only tiers: the galleon's hull rides bright, the sea mid-cyan,
+	// the waves deep, and the wordmark sweep near-white.
+	styleShipHull   = lipgloss.NewStyle().Foreground(lipgloss.Color("253"))
+	styleShipSea    = lipgloss.NewStyle().Foreground(lipgloss.Color("38"))
+	styleShipWave   = lipgloss.NewStyle().Foreground(lipgloss.Color("31"))
+	styleShipBright = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("231"))
 )
 
 // ruleWidth is the screens' shared visual width. Fixed rather than
