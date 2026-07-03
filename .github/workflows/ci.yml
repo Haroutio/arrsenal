@@ -102,9 +102,13 @@ jobs:
         run: |
           ./arrsenal --yes --gpu none --admin-user ci --admin-pass ci-wiring-pass \
             --state /tmp/arrtest/arrsenal.yaml --artifacts-dir /tmp/arrtest | tee /tmp/second-run.log
-          grep -q "existed" /tmp/second-run.log
-          if grep -q "✗" /tmp/second-run.log; then echo "re-run produced failures" && exit 1; fi
-          if grep -qE "^  ✓" /tmp/second-run.log; then echo "re-run re-wired something — idempotency broken" && exit 1; fi
+          # Assert within the wiring REPORT only — container readiness lines
+          # legitimately print ✓ and must not trip the re-wire check.
+          awk '/^Wiring report:/,0' /tmp/second-run.log > /tmp/report.log
+          cat /tmp/report.log
+          grep -q "existed" /tmp/report.log
+          if grep -q "✗" /tmp/report.log; then echo "re-run produced failures" && exit 1; fi
+          if grep -qE "^  ✓" /tmp/report.log; then echo "re-run re-wired something — idempotency broken" && exit 1; fi
       - name: deselecting an app removes its container, preserves its config
         run: |
           ./arrsenal --yes --apps prowlarr,sonarr --gpu none \
