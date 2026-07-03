@@ -77,6 +77,17 @@ func ScanConflicts(s *state.State, deps ScanDeps) ([]Conflict, error) {
 	}
 
 	var out []Conflict
+	// The VPN tunnel claims a container name of its own (issue #27).
+	if s.VPNEnabled() {
+		if project, exists := containers["gluetun"]; exists && project != ComposeProject {
+			detail := "a container named \"gluetun\" already exists"
+			if project != "" {
+				detail += fmt.Sprintf(" (compose project %q)", project)
+			}
+			out = append(out, Conflict{App: "gluetun", Kind: KindContainerName,
+				Detail: detail + " — disable the VPN option, or remove/rename that container"})
+		}
+	}
 	for _, id := range s.Apps {
 		app, _ := registry.ByID(id)
 

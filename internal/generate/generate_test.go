@@ -64,6 +64,12 @@ func goldenCases() map[string]*state.State {
 	split.DataRoot = "/mnt/pool/data"
 	split.DownloadsRoot = "/mnt/nvme/downloads"
 
+	// Issue #27: gluetun fronting qBittorrent.
+	vpn := baseState()
+	vpn.Apps = []string{"sonarr", "qbittorrent"}
+	vpn.VPN = state.VPN{Provider: "mullvad", Countries: "Netherlands"}
+	vpn.Secrets.WireguardPrivateKey = "wg-key-SECRET"
+
 	return map[string]*state.State{
 		"minimal":          minimal,
 		"full-stack":       full,
@@ -73,6 +79,57 @@ func goldenCases() map[string]*state.State {
 		"gpu-amd":          amd,
 		"jellyfin-hostnet": hostnet,
 		"split-storage":    split,
+		"vpn-qbittorrent":  vpn,
+	}
+}
+
+func TestVPNComposeShape(t *testing.T) {
+	got := render(t, goldenCases()["vpn-qbittorrent"])
+	var doc struct {
+		Services map[string]struct {
+			NetworkMode string            `yaml:"network_mode"`
+			DependsOn   []string          `yaml:"depends_on"`
+			CapAdd      []string          `yaml:"cap_add"`
+			EnvFile     []string          `yaml:"env_file"`
+			Ports       []string          `yaml:"ports"`
+			Environment map[string]string `yaml:"environment"`
+		} `yaml:"services"`
+	}
+	if err := yamlUnmarshal(got.Compose, &doc); err != nil {
+		t.Fatal(err)
+	}
+	qb := doc.Services["qbittorrent"]
+	if qb.NetworkMode != "service:gluetun" || len(qb.Ports) != 0 {
+		t.Fatalf("qbittorrent must live in gluetun's netns with no own ports: %+v", qb)
+	}
+	if len(qb.DependsOn) != 1 || qb.DependsOn[0] != "gluetun" {
+		t.Fatalf("qbittorrent must depend on gluetun: %+v", qb.DependsOn)
+	}
+	gt := doc.Services["gluetun"]
+	if gt.Environment["VPN_SERVICE_PROVIDER"] != "mullvad" || gt.Environment["SERVER_COUNTRIES"] != "Netherlands" {
+		t.Fatalf("gluetun env: %v", gt.Environment)
+	}
+	if len(gt.CapAdd) != 1 || gt.CapAdd[0] != "NET_ADMIN" {
+		t.Fatalf("gluetun caps: %v", gt.CapAdd)
+	}
+	if len(gt.EnvFile) != 1 || gt.EnvFile[0] != "${APPDATA}/gluetun/credentials.env" {
+		t.Fatalf("credentials must ride the 0600 env-file: %v", gt.EnvFile)
+	}
+	found := false
+	for _, p := range gt.Ports {
+		if p == "8081:8081" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("gluetun must publish qBittorrent's web port: %v", gt.Ports)
+	}
+
+	// The tunnel key must never reach the artifacts (they are 0644).
+	for name, b := range map[string][]byte{"compose": got.Compose, "env": got.Env} {
+		if strings.Contains(string(b), "wg-key-SECRET") {
+			t.Fatalf("%s leaked the wireguard key", name)
+		}
 	}
 }
 

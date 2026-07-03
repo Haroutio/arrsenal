@@ -23,7 +23,8 @@ import (
 // error (DESIGN.md §1).
 //
 // History: v1 — initial. v2 — adds optional downloads_root (split storage).
-const CurrentVersion = 2
+// v3 — adds vpn (gluetun in front of qBittorrent) + its secret.
+const CurrentVersion = 3
 
 // DefaultPath is where Arrsenal keeps everything it owns (DESIGN.md §1).
 const DefaultPath = "/opt/arrsenal/arrsenal.yaml"
@@ -47,6 +48,23 @@ type Secrets struct {
 	// qBittorrent's own generated password lands only in container logs, so
 	// Arrsenal generates one, persists it, and pre-seeds it.
 	QBittorrentPassword string `yaml:"qbittorrent_webui_password,omitempty"`
+
+	// WireguardPrivateKey authenticates the VPN tunnel (issue #27). It is
+	// rendered into gluetun's own 0600 env-file — never into the
+	// world-readable compose artifacts.
+	WireguardPrivateKey string `yaml:"wireguard_private_key,omitempty"`
+}
+
+// VPN routes qBittorrent through a gluetun tunnel (issue #27). Provider set
+// = enabled. gluetun's built-in kill switch means a dropped tunnel takes
+// qBittorrent's connectivity with it — that is the point.
+type VPN struct {
+	// Provider is a gluetun VPN_SERVICE_PROVIDER name (mullvad, protonvpn,
+	// nordvpn, …) — validated by gluetun itself at startup.
+	Provider string `yaml:"provider,omitempty"`
+	// Countries optionally narrows server selection (gluetun
+	// SERVER_COUNTRIES, comma-separated).
+	Countries string `yaml:"countries,omitempty"`
 }
 
 // State is the user's answers — the single source every artifact is
@@ -87,6 +105,8 @@ type State struct {
 	// JellyfinHostNetwork switches Jellyfin to host networking for DLNA and
 	// client auto-discovery (DESIGN.md §6). Bridge is the default.
 	JellyfinHostNetwork bool `yaml:"jellyfin_host_network,omitempty"`
+
+	VPN VPN `yaml:"vpn,omitempty"`
 
 	Secrets Secrets `yaml:"secrets,omitempty"`
 }
@@ -153,6 +173,9 @@ func (s *State) WebPorts(app registry.App) (host, container int) {
 	}
 	return host, container
 }
+
+// VPNEnabled reports whether qBittorrent routes through gluetun.
+func (s *State) VPNEnabled() bool { return s.VPN.Provider != "" }
 
 // HostNetworked reports whether an app runs on host networking instead of
 // the bridge. The one home for the rule — generation and validation must
@@ -323,6 +346,18 @@ func (s *State) Validate() error {
 		return fmt.Errorf("unknown gpu mode %q (valid: none, nvidia, intel, amd)", s.GPU)
 	}
 
+	if s.VPNEnabled() {
+		if !contains(s.Apps, "qbittorrent") {
+			return errors.New("vpn is configured but qBittorrent is not selected — the tunnel would carry nothing")
+		}
+		if s.Secrets.WireguardPrivateKey == "" {
+			return errors.New("vpn is configured without a wireguard private key")
+		}
+		if strings.ContainsAny(s.VPN.Provider+s.VPN.Countries, "\n\r#\"") {
+			return errors.New("vpn provider/countries contain characters that would corrupt the env file")
+		}
+	}
+
 	// Remaps must reference real apps and ports they actually publish.
 	for id, remaps := range s.PortRemaps {
 		app, ok := registry.ByID(id)
@@ -368,6 +403,15 @@ func (s *State) Validate() error {
 		}
 	}
 	return nil
+}
+
+func contains(list []string, want string) bool {
+	for _, v := range list {
+		if v == want {
+			return true
+		}
+	}
+	return false
 }
 
 func registryIDs() []string {

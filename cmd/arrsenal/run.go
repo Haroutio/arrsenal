@@ -78,6 +78,15 @@ func applyFlagOverrides(s *state.State, o options, fresh bool) {
 	if o.jellyfinHostNet {
 		s.JellyfinHostNetwork = true
 	}
+	if o.vpnProvider != "" {
+		s.VPN.Provider = o.vpnProvider
+	}
+	if o.vpnKey != "" {
+		s.Secrets.WireguardPrivateKey = o.vpnKey
+	}
+	if o.vpnCountries != "" {
+		s.VPN.Countries = o.vpnCountries
+	}
 	if o.tz != "" && (fresh || o.yes) {
 		s.TZ = o.tz
 	}
@@ -167,7 +176,29 @@ func interactiveFill(s *state.State, o *options) error {
 		fmt.Println()
 	}
 
-	// 5. GPU: an explicit --gpu flag outranks detection entirely; otherwise
+	// 5. VPN for qBittorrent (issue #27): only offered when qBittorrent is
+	// selected and nothing is configured yet; flags outrank the prompt.
+	if selectedID(s, "qbittorrent") && !s.VPNEnabled() && o.vpnProvider == "" {
+		if confirm("Route qBittorrent through a VPN (gluetun, WireGuard)?", false) {
+			reader := bufio.NewReader(os.Stdin)
+			fmt.Print("VPN provider (gluetun name, e.g. mullvad, protonvpn): ")
+			if line, err := reader.ReadString('\n'); err == nil {
+				s.VPN.Provider = strings.TrimSpace(line)
+			}
+			fmt.Print("WireGuard private key: ")
+			if pw, err := term.ReadPassword(int(os.Stdin.Fd())); err == nil {
+				s.Secrets.WireguardPrivateKey = strings.TrimSpace(string(pw))
+			}
+			fmt.Println()
+			fmt.Print("Server countries (optional, comma-separated): ")
+			if line, err := reader.ReadString('\n'); err == nil {
+				s.VPN.Countries = strings.TrimSpace(line)
+			}
+			fmt.Println("note: gluetun's kill switch means a dropped tunnel takes qBittorrent offline until it reconnects")
+		}
+	}
+
+	// 6. GPU: an explicit --gpu flag outranks detection entirely; otherwise
 	// detection proposes and the user disposes — including a manual pick
 	// when the probes miss hardware the machine's owner knows is there.
 	if o.gpu != "" {
@@ -309,6 +340,21 @@ func pipeline(s *state.State, o options) error {
 		fmt.Printf("%s: %s %s\n", r.Connection, r.Outcome, r.Detail)
 	}
 
+	// gluetun's credentials file is Arrsenal-owned (derived purely from
+	// state) and always regenerated — 0600, outside the world-readable
+	// artifacts (issue #27).
+	if s.VPNEnabled() {
+		credPath := filepath.Join(s.AppdataRoot, "gluetun", "credentials.env")
+		if err := os.MkdirAll(filepath.Dir(credPath), 0o755); err != nil {
+			return err
+		}
+		cred := fmt.Sprintf("WIREGUARD_PRIVATE_KEY=%s\n", s.Secrets.WireguardPrivateKey)
+		if err := os.WriteFile(credPath, []byte(cred), 0o600); err != nil {
+			return fmt.Errorf("writing VPN credentials file: %w", err)
+		}
+		fmt.Printf("vpn: gluetun (%s) fronts qBittorrent — if the tunnel drops, qBittorrent goes offline (kill switch)\n", s.VPN.Provider)
+	}
+
 	artifacts, err := generate.Render(s, o.statePath)
 	if err != nil {
 		return err
@@ -428,6 +474,10 @@ func buildSpec(s *state.State, o options, adopted map[string]bool) wire.Spec {
 	if qb, ok := registry.ByID("qbittorrent"); ok {
 		_, qbitContainer = s.WebPorts(qb)
 	}
+	qbitHost := "qbittorrent"
+	if s.VPNEnabled() {
+		qbitHost = "gluetun"
+	}
 	return wire.Spec{
 		Apps:        apps,
 		Adopted:     adopted,
@@ -448,6 +498,7 @@ func buildSpec(s *state.State, o options, adopted map[string]bool) wire.Spec {
 			return fmt.Sprintf("http://127.0.0.1:%d", port)
 		},
 		QBitContainerPort: qbitContainer,
+		QBitHost:          qbitHost,
 	}
 }
 
