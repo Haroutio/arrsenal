@@ -18,7 +18,14 @@ func gpuProbes(nvidiaOK, toolkitOK bool, vendors ...string) GPUProbes {
 		},
 		NvidiaToolkitPresent: func() bool { return toolkitOK },
 		DRIVendors:           func() []string { return vendors },
+		PCIDisplayVendors:    func() []string { return nil },
 	}
+}
+
+// withPCI overlays the PCI-bus view (what EXISTS, driver or not).
+func withPCI(p GPUProbes, vendors ...string) GPUProbes {
+	p.PCIDisplayVendors = func() []string { return vendors }
+	return p
 }
 
 func TestDetectGPULanes(t *testing.T) {
@@ -52,12 +59,48 @@ func TestNvidiaWithoutToolkitProposesInstall(t *testing.T) {
 	}
 }
 
-func TestNoGPUExplainsTheDriverLine(t *testing.T) {
+func TestNoGPUAnywhereSaysSo(t *testing.T) {
 	got := DetectGPU(gpuProbes(false, false))
-	for _, want := range []string{"CPU", "never installs kernel drivers"} {
+	for _, want := range []string{"CPU", "No GPU detected"} {
 		if !strings.Contains(got.Detail, want) {
 			t.Errorf("detail should mention %q: %s", want, got.Detail)
 		}
+	}
+}
+
+func TestDeadNvidiaDriverIsDiagnosedFromThePCIBus(t *testing.T) {
+	// The mediasrv case: RTX passed through (0x10de on the bus, QEMU's
+	// 0x1234 display too), nvidia-smi dead, no render nodes.
+	probes := withPCI(gpuProbes(false, false), "0x1234", "0x10de")
+	got := DetectGPU(probes)
+	if got.Proposal != state.GPUNone {
+		t.Fatalf("dead driver must still propose none, got %s", got.Proposal)
+	}
+	for _, want := range []string{"NVIDIA GPU is visible on the PCI bus", "driver is not working", "kernel update", "never installs kernel drivers"} {
+		if !strings.Contains(got.Detail, want) {
+			t.Errorf("detail should mention %q: %s", want, got.Detail)
+		}
+	}
+}
+
+func TestInertIntelOnBusIsDiagnosed(t *testing.T) {
+	probes := withPCI(gpuProbes(false, false), "0x8086")
+	got := DetectGPU(probes)
+	if got.Proposal != state.GPUNone || !strings.Contains(got.Detail, "no /dev/dri render device") {
+		t.Fatalf("driverless Intel GPU should be named: %+v", got)
+	}
+}
+
+func TestWorkingDriversStillWinOverPCIDiagnosis(t *testing.T) {
+	// A live NVIDIA driver with the card obviously also on the bus.
+	probes := withPCI(gpuProbes(true, true), "0x10de")
+	if got := DetectGPU(probes); got.Proposal != state.GPUNvidia {
+		t.Fatalf("working nvidia must be chosen, got %+v", got)
+	}
+	// QEMU's virtual display (0x1234) alone must not trigger GPU messaging.
+	probes = withPCI(gpuProbes(false, false), "0x1234")
+	if got := DetectGPU(probes); !strings.Contains(got.Detail, "No GPU detected") {
+		t.Fatalf("a virtual display adapter is not a GPU: %s", got.Detail)
 	}
 }
 

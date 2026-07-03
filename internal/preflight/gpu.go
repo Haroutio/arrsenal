@@ -34,6 +34,12 @@ type GPUProbes struct {
 	// DRIVendors returns the PCI vendor IDs of /dev/dri render devices
 	// (e.g. "0x8086" Intel, "0x1002" AMD). Empty when /dev/dri is absent.
 	DRIVendors func() []string
+	// PCIDisplayVendors returns vendor IDs of display-class devices on the
+	// PCI bus — cards that EXIST, working driver or not. The difference
+	// between "no GPU" and "GPU with a dead driver" is the difference
+	// between a shrug and a fix (found the hard way on a passed-through
+	// RTX whose modules were outrun by a kernel update).
+	PCIDisplayVendors func() []string
 }
 
 // DefaultGPUProbes wires the real probes.
@@ -46,7 +52,8 @@ func DefaultGPUProbes() GPUProbes {
 			out, err := exec.Command("docker", "info", "--format", "{{json .Runtimes}}").Output()
 			return err == nil && strings.Contains(string(out), "nvidia")
 		},
-		DRIVendors: driVendors,
+		DRIVendors:        driVendors,
+		PCIDisplayVendors: pciDisplayVendors,
 	}
 }
 
@@ -83,10 +90,47 @@ func DetectGPU(p GPUProbes) GPUDetection {
 		}
 	}
 
+	// Nothing usable — but say WHY when a card is sitting on the bus.
+	pci := map[string]bool{}
+	if p.PCIDisplayVendors != nil {
+		for _, v := range p.PCIDisplayVendors() {
+			pci[v] = true
+		}
+	}
+	switch {
+	case pci["0x10de"]:
+		return GPUDetection{Proposal: state.GPUNone,
+			Detail: "An NVIDIA GPU is visible on the PCI bus, but its driver is not working (nvidia-smi cannot reach it). " +
+				"Usual causes: the driver was never installed, or a kernel update outran the NVIDIA modules. " +
+				"On Ubuntu: `sudo apt install linux-modules-nvidia-<version>-$(uname -r)` (or reinstall your nvidia-driver package), " +
+				"then re-run — Arrsenal never installs kernel drivers, but it takes over from the moment nvidia-smi works."}
+	case pci["0x8086"] || pci["0x1002"]:
+		return GPUDetection{Proposal: state.GPUNone,
+			Detail: "A GPU is visible on the PCI bus, but it has no /dev/dri render device — its kernel driver is not active. " +
+				"Fix the driver (kernel module) for it, then re-run; transcoding uses the CPU until then."}
+	}
 	return GPUDetection{Proposal: state.GPUNone,
-		Detail: "No usable GPU detected — transcoding will use the CPU. If this machine has an NVIDIA card, " +
-			"install its driver first (Arrsenal never installs kernel drivers) and re-run; " +
-			"Intel/AMD GPUs are detected via /dev/dri automatically."}
+		Detail: "No GPU detected on this machine — transcoding will use the CPU. If a GPU should be here " +
+			"(passed through to a VM, for instance), check that the host actually attached it; " +
+			"Intel/AMD are detected via /dev/dri, NVIDIA via nvidia-smi."}
+}
+
+// pciDisplayVendors scans the PCI bus for display-class (0x03xxxx) devices.
+func pciDisplayVendors() []string {
+	devices, _ := filepath.Glob("/sys/bus/pci/devices/*/class")
+	var out []string
+	for _, classFile := range devices {
+		class, err := os.ReadFile(classFile)
+		if err != nil || !strings.HasPrefix(strings.TrimSpace(string(class)), "0x03") {
+			continue
+		}
+		vendor, err := os.ReadFile(filepath.Join(filepath.Dir(classFile), "vendor"))
+		if err != nil {
+			continue
+		}
+		out = append(out, strings.TrimSpace(string(vendor)))
+	}
+	return out
 }
 
 // driVendors reads the render devices' PCI vendor IDs from sysfs.
