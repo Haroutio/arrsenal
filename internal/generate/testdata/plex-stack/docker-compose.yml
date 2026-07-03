@@ -5,21 +5,19 @@
 # automatically and Arrsenal never touches it.
 name: arrsenal
 services:
-  overseerr:
-    image: lscr.io/linuxserver/overseerr:latest
-    container_name: overseerr
+  jellyseerr:
+    image: ghcr.io/seerr-team/seerr:latest
+    container_name: jellyseerr
     restart: unless-stopped
+    user: ${PUID}:${PGID}
     networks:
     - arrsenal
     environment:
-      PGID: ${PGID}
-      PUID: ${PUID}
       TZ: ${TZ}
-      UMASK: ${UMASK}
     ports:
-    - "5056:5055"
+    - "5055:5055"
     volumes:
-    - ${APPDATA}/overseerr:/config
+    - ${APPDATA}/jellyseerr:/app/config
   plex:
     image: lscr.io/linuxserver/plex:latest
     container_name: plex

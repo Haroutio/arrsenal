@@ -146,7 +146,6 @@ installs: `sudo arrsenal --yes --apps sonarr,radarr,... --admin-pass ...`
 | [qBittorrent](https://www.qbittorrent.org) | Torrent download client |
 | [Bazarr](https://www.bazarr.media) | Subtitles |
 | [Seerr](https://docs.seerr.dev) | Requests — works with Jellyfin, Plex and Emby |
-| [Overseerr](https://overseerr.dev) | Requests (superseded upstream: merged into Seerr) |
 | [Homepage](https://gethomepage.dev) | Dashboard, widgets pre-wired |
 
 Jellyfin is the recommended media server because its hardware transcoding — using

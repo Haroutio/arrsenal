@@ -67,7 +67,7 @@ func goldenCases() map[string]*state.State {
 	// Issue #26: the Plex path — Plex + Overseerr side by side with an arr,
 	// GPU block present, claim env-file referenced.
 	plex := baseState()
-	plex.Apps = []string{"plex", "overseerr", "sonarr"}
+	plex.Apps = []string{"plex", "jellyseerr", "sonarr"}
 	plex.GPU = state.GPUNvidia
 
 	// Issue #27: gluetun fronting qBittorrent.
@@ -113,15 +113,15 @@ func TestPlexStackShape(t *testing.T) {
 	if px.Env["VERSION"] != "docker" {
 		t.Fatalf("plex env: %v", px.Env)
 	}
-	ov := doc.Services["overseerr"]
+	js := doc.Services["jellyseerr"]
 	found := false
-	for _, p := range ov.Ports {
-		if p == "5056:5055" {
+	for _, p := range js.Ports {
+		if p == "5055:5055" {
 			found = true
 		}
 	}
 	if !found {
-		t.Fatalf("overseerr must default to host 5056 (jellyseerr owns 5055): %v", ov.Ports)
+		t.Fatalf("seerr must publish 5055: %v", js.Ports)
 	}
 }
 

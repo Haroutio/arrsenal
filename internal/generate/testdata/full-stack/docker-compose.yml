@@ -98,21 +98,6 @@ services:
     volumes:
     - ${APPDATA}/lidarr:/config
     - ${DATA}:/data
-  overseerr:
-    image: lscr.io/linuxserver/overseerr:latest
-    container_name: overseerr
-    restart: unless-stopped
-    networks:
-    - arrsenal
-    environment:
-      PGID: ${PGID}
-      PUID: ${PUID}
-      TZ: ${TZ}
-      UMASK: ${UMASK}
-    ports:
-    - "5056:5055"
-    volumes:
-    - ${APPDATA}/overseerr:/config
   plex:
     image: lscr.io/linuxserver/plex:latest
     container_name: plex
