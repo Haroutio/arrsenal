@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Design rationale
+    url: https://github.com/Haroutio/arrsenal/blob/main/docs/DESIGN.md
+    about: Every load-bearing decision, with reasoning — check here before filing "why doesn't it..." issues.
