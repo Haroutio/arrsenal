@@ -66,6 +66,36 @@ func TestPathsRealStorageProceedsDirectly(t *testing.T) {
 	}
 }
 
+func TestPathsSplitStorageField(t *testing.T) {
+	s := state.New()
+	s.Apps = []string{"sonarr"}
+	s.DataRoot = "/mnt/das/data"
+	m := NewPaths(s, fixtureMounts())
+
+	// Third field: set a downloads root, watch the split note appear.
+	m.inputs[2].SetValue("/mnt/nvme/dl")
+	view := m.View()
+	for _, want := range []string{"Downloads root", "split storage", "copy instead of hardlink"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("view missing %q", want)
+		}
+	}
+	m = pathsEnter(m, s)
+	if !m.Done() {
+		t.Fatalf("valid split config must proceed: %s", m.err)
+	}
+	m.Apply(s)
+	if s.DownloadsRoot != "/mnt/nvme/dl" || !s.SplitStorage() {
+		t.Fatalf("apply: %q", s.DownloadsRoot)
+	}
+
+	// Blank third field = single root, no note.
+	m2 := NewPaths(state.New(), fixtureMounts())
+	if strings.Contains(m2.View(), "split storage") {
+		t.Fatal("no note when downloads root is blank")
+	}
+}
+
 func TestPathsValidationBlocksBadPaths(t *testing.T) {
 	s := state.New()
 	s.Apps = []string{"sonarr"}

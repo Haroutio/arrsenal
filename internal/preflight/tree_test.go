@@ -38,7 +38,7 @@ func TestEnsureTreeCreatesTheFullLayout(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, sub := range DataSubdirs {
+	for _, sub := range append(append([]string{}, MediaSubdirs...), DownloadSubdirs...) {
 		p := filepath.Join(s.DataRoot, sub)
 		info, err := os.Stat(p)
 		if err != nil || !info.IsDir() {
@@ -57,8 +57,30 @@ func TestEnsureTreeCreatesTheFullLayout(t *testing.T) {
 			created++
 		}
 	}
-	if created != len(DataSubdirs)+len(s.Apps) {
-		t.Errorf("created %d dirs, want %d", created, len(DataSubdirs)+len(s.Apps))
+	want := len(MediaSubdirs) + len(DownloadSubdirs) + len(s.Apps)
+	if created != want {
+		t.Errorf("created %d dirs, want %d", created, want)
+	}
+}
+
+func TestEnsureTreeSplitStorage(t *testing.T) {
+	linuxOnly(t)
+	s := testState(t, "sonarr")
+	s.DownloadsRoot = filepath.Join(filepath.Dir(s.DataRoot), "scratch")
+
+	if _, err := EnsureTree(s); err != nil {
+		t.Fatal(err)
+	}
+	// Media under the data root, downloads under the scratch root — and
+	// crucially NOT under the data root.
+	if info, err := os.Stat(filepath.Join(s.DataRoot, "media", "tv")); err != nil || !info.IsDir() {
+		t.Error("media tree missing under data root")
+	}
+	if info, err := os.Stat(filepath.Join(s.DownloadsRoot, "usenet", "complete")); err != nil || !info.IsDir() {
+		t.Error("usenet tree missing under downloads root")
+	}
+	if _, err := os.Stat(filepath.Join(s.DataRoot, "usenet")); err == nil {
+		t.Error("usenet tree must NOT be created under the data root when split")
 	}
 }
 

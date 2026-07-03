@@ -31,14 +31,15 @@ type PathsModel struct {
 func NewPaths(s *state.State, mounts []preflight.MountInfo) PathsModel {
 	m := PathsModel{
 		mounts: mounts,
-		inputs: make([]textinput.Model, 2),
+		inputs: make([]textinput.Model, 3),
 	}
-	for i, v := range []string{s.DataRoot, s.AppdataRoot} {
+	for i, v := range []string{s.DataRoot, s.AppdataRoot, s.DownloadsRoot} {
 		in := textinput.New()
 		in.SetValue(v)
 		in.CharLimit = 200
 		m.inputs[i] = in
 	}
+	m.inputs[2].Placeholder = "blank = same disk as media (hardlink imports)"
 	m.inputs[0].Focus()
 	return m
 }
@@ -47,6 +48,7 @@ func NewPaths(s *state.State, mounts []preflight.MountInfo) PathsModel {
 func (m PathsModel) Apply(s *state.State) {
 	s.DataRoot = strings.TrimSpace(m.inputs[0].Value())
 	s.AppdataRoot = strings.TrimSpace(m.inputs[1].Value())
+	s.DownloadsRoot = strings.TrimSpace(m.inputs[2].Value())
 }
 
 // Done reports confirmation with valid paths (and an acknowledged warning
@@ -63,15 +65,13 @@ func (m PathsModel) UpdateWith(msg tea.Msg, s *state.State) (PathsModel, tea.Cmd
 		case "ctrl+c", "esc":
 			m.quit = true
 			return m, tea.Quit
-		case "tab", "down", "shift+tab", "up":
-			m.focus = (m.focus + 1) % 2
-			for i := range m.inputs {
-				if i == m.focus {
-					m.inputs[i].Focus()
-				} else {
-					m.inputs[i].Blur()
-				}
-			}
+		case "tab", "down":
+			m.focus = (m.focus + 1) % len(m.inputs)
+			m.refocus()
+			return m, nil
+		case "shift+tab", "up":
+			m.focus = (m.focus + len(m.inputs) - 1) % len(m.inputs)
+			m.refocus()
 			return m, nil
 		case "enter":
 			candidate := *s
@@ -99,6 +99,16 @@ func (m PathsModel) UpdateWith(msg tea.Msg, s *state.State) (PathsModel, tea.Cmd
 	return m, cmd
 }
 
+func (m *PathsModel) refocus() {
+	for i := range m.inputs {
+		if i == m.focus {
+			m.inputs[i].Focus()
+		} else {
+			m.inputs[i].Blur()
+		}
+	}
+}
+
 // osDiskWarning speaks up when the data root lands on the root filesystem.
 func (m PathsModel) osDiskWarning(dataRoot string) string {
 	mount, ok := preflight.MountFor(dataRoot, m.mounts)
@@ -115,8 +125,13 @@ func (m PathsModel) View() string {
 	var b strings.Builder
 	b.WriteString(styleTitle.Render("Storage") + "\n")
 	b.WriteString(styleDim.Render("One data root keeps imports as instant hardlinks; appdata is the backup surface.") + "\n\n")
-	fmt.Fprintf(&b, "  %-13s %s\n", "Data root", m.inputs[0].View())
-	fmt.Fprintf(&b, "  %-13s %s\n", "Appdata root", m.inputs[1].View())
+	fmt.Fprintf(&b, "  %-15s %s\n", "Media root", m.inputs[0].View())
+	fmt.Fprintf(&b, "  %-15s %s\n", "Appdata root", m.inputs[1].View())
+	fmt.Fprintf(&b, "  %-15s %s\n", "Downloads root", m.inputs[2].View())
+	if strings.TrimSpace(m.inputs[2].Value()) != "" &&
+		strings.TrimSpace(m.inputs[2].Value()) != strings.TrimSpace(m.inputs[0].Value()) {
+		b.WriteString("  " + styleDim.Render("split storage: downloads on their own disk — imports copy instead of hardlink (fine for an SSD-scratch setup)") + "\n")
+	}
 
 	if len(m.mounts) > 0 {
 		b.WriteString("\n" + styleGroup.Render("Detected storage") + "\n")

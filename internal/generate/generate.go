@@ -129,7 +129,7 @@ func renderService(s *state.State, app registry.App) service {
 		ContainerName: app.ID,
 		Restart:       "unless-stopped",
 		Environment:   map[string]string{"TZ": "${TZ}"},
-		Volumes:       renderVolumes(app),
+		Volumes:       renderVolumes(s, app),
 	}
 
 	switch app.Identity {
@@ -180,28 +180,49 @@ func renderPorts(s *state.State, app registry.App) []portMapping {
 	return out
 }
 
-func renderVolumes(app registry.App) []string {
+// downloadSubs are the trees that follow the downloads root when storage is
+// split (issue #59). Media always follows the data root.
+var downloadSubs = map[string]bool{"usenet": true, "torrents": true}
+
+func renderVolumes(s *state.State, app registry.App) []string {
 	var out []string
 	for _, m := range app.Mounts {
-		var src string
 		switch m.Kind {
 		case registry.SourceAppdata:
-			src = "${APPDATA}/" + app.ID
-		case registry.SourceData:
-			src = "${DATA}"
-			if m.Sub != "" {
-				src += "/" + m.Sub
-			}
+			out = append(out, mountEntry("${APPDATA}/"+app.ID, m.Target, m.ReadOnly))
 		case registry.SourceHost:
-			src = m.Sub
+			out = append(out, mountEntry(m.Sub, m.Target, m.ReadOnly))
+		case registry.SourceData:
+			switch {
+			case m.Sub == "" && !s.SplitStorage():
+				// The classic single mount: downloads + media on one
+				// filesystem, imports are hardlinks.
+				out = append(out, mountEntry("${DATA}", m.Target, m.ReadOnly))
+			case m.Sub == "" && s.SplitStorage():
+				// The full-root mount cannot span two filesystems; expand it
+				// into the three fixed container paths so every app still
+				// sees the same /data layout (issue #59).
+				out = append(out,
+					mountEntry("${DATA}/media", m.Target+"/media", m.ReadOnly),
+					mountEntry("${DOWNLOADS}/usenet", m.Target+"/usenet", m.ReadOnly),
+					mountEntry("${DOWNLOADS}/torrents", m.Target+"/torrents", m.ReadOnly),
+				)
+			case downloadSubs[m.Sub] && s.SplitStorage():
+				out = append(out, mountEntry("${DOWNLOADS}/"+m.Sub, m.Target, m.ReadOnly))
+			default:
+				out = append(out, mountEntry("${DATA}/"+m.Sub, m.Target, m.ReadOnly))
+			}
 		}
-		entry := src + ":" + m.Target
-		if m.ReadOnly {
-			entry += ":ro"
-		}
-		out = append(out, entry)
 	}
 	return out
+}
+
+func mountEntry(src, target string, readOnly bool) string {
+	entry := src + ":" + target
+	if readOnly {
+		entry += ":ro"
+	}
+	return entry
 }
 
 // applyGPU wires the transcode device per mode (DESIGN.md §8). Group handling
@@ -236,6 +257,9 @@ func envBody(s *state.State) []byte {
 	fmt.Fprintf(&b, "TZ=%s\n", s.TZ)
 	fmt.Fprintf(&b, "UMASK=%s\n", s.Umask)
 	fmt.Fprintf(&b, "DATA=%s\n", s.DataRoot)
+	if s.SplitStorage() {
+		fmt.Fprintf(&b, "DOWNLOADS=%s\n", s.DownloadsRoot)
+	}
 	fmt.Fprintf(&b, "APPDATA=%s\n", s.AppdataRoot)
 	return []byte(b.String())
 }

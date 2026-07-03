@@ -57,6 +57,13 @@ func goldenCases() map[string]*state.State {
 	hostnet.Apps = []string{"jellyfin", "jellyseerr"}
 	hostnet.JellyfinHostNetwork = true
 
+	// Issue #59: downloads on their own filesystem (NVMe scratch), media on
+	// the array. Container paths stay identical to the single-root layout.
+	split := baseState()
+	split.Apps = []string{"jellyfin", "sonarr", "sabnzbd", "qbittorrent"}
+	split.DataRoot = "/mnt/pool/data"
+	split.DownloadsRoot = "/mnt/nvme/downloads"
+
 	return map[string]*state.State{
 		"minimal":          minimal,
 		"full-stack":       full,
@@ -65,6 +72,55 @@ func goldenCases() map[string]*state.State {
 		"gpu-intel":        intel,
 		"gpu-amd":          amd,
 		"jellyfin-hostnet": hostnet,
+		"split-storage":    split,
+	}
+}
+
+func TestSplitStorageMounts(t *testing.T) {
+	got := render(t, goldenCases()["split-storage"])
+	var doc struct {
+		Services map[string]struct {
+			Volumes []string `yaml:"volumes"`
+		} `yaml:"services"`
+	}
+	if err := yamlUnmarshal(got.Compose, &doc); err != nil {
+		t.Fatal(err)
+	}
+	has := func(svc, vol string) bool {
+		for _, v := range doc.Services[svc].Volumes {
+			if v == vol {
+				return true
+			}
+		}
+		return false
+	}
+	// PVR: the full-root mount expands into the three fixed container paths.
+	for _, want := range []string{
+		"${DATA}/media:/data/media",
+		"${DOWNLOADS}/usenet:/data/usenet",
+		"${DOWNLOADS}/torrents:/data/torrents",
+	} {
+		if !has("sonarr", want) {
+			t.Errorf("sonarr missing %q: %v", want, doc.Services["sonarr"].Volumes)
+		}
+	}
+	if has("sonarr", "${DATA}:/data") {
+		t.Error("split storage must not emit the spanning single mount")
+	}
+	// Download clients follow the downloads root; media stays on data.
+	if !has("sabnzbd", "${DOWNLOADS}/usenet:/data/usenet") {
+		t.Errorf("sabnzbd: %v", doc.Services["sabnzbd"].Volumes)
+	}
+	if !has("qbittorrent", "${DOWNLOADS}/torrents:/data/torrents") {
+		t.Errorf("qbittorrent: %v", doc.Services["qbittorrent"].Volumes)
+	}
+	if !has("jellyfin", "${DATA}/media:/media") {
+		t.Errorf("jellyfin: %v", doc.Services["jellyfin"].Volumes)
+	}
+	// .env carries both roots.
+	env := string(got.Env)
+	if !strings.Contains(env, "DATA=/mnt/pool/data\n") || !strings.Contains(env, "DOWNLOADS=/mnt/nvme/downloads\n") {
+		t.Fatalf(".env roots:\n%s", env)
 	}
 }
 

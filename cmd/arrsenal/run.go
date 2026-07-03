@@ -253,13 +253,20 @@ func pipeline(s *state.State, o options) error {
 	}
 	fmt.Printf("directories: %d verified, %d created\n", len(dirs)-created, created)
 
-	if hl := preflight.CheckHardlink(filepath.Join(s.DataRoot, "usenet"), filepath.Join(s.DataRoot, "media")); !hl.OK {
+	hl := preflight.CheckHardlink(filepath.Join(s.EffectiveDownloadsRoot(), "usenet"), filepath.Join(s.DataRoot, "media"))
+	switch {
+	case hl.OK:
+		fmt.Println(hl.Detail)
+	case s.SplitStorage():
+		// The split is an informed choice (issue #59): downloads on scratch,
+		// media on the array. Copy-mode is the accepted tradeoff, not a
+		// misconfiguration — no scary warning, no confirmation gate.
+		fmt.Println("downloads and media are on separate filesystems (as configured) — imports will copy, not hardlink")
+	default:
 		fmt.Println("warning:", hl.Detail)
 		if !o.yes && !confirm("Continue with copy-mode imports?", false) {
 			return errors.New("aborted")
 		}
-	} else {
-		fmt.Println(hl.Detail)
 	}
 	if se := preflight.CheckSELinux(); se.Enforcing {
 		fmt.Println("warning:", se.Warning)

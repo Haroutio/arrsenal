@@ -21,7 +21,9 @@ import (
 // addition is silently destroyed by an old binary's load→save cycle. The
 // version gate is what turns that data loss into a clear "upgrade arrsenal"
 // error (DESIGN.md §1).
-const CurrentVersion = 1
+//
+// History: v1 — initial. v2 — adds optional downloads_root (split storage).
+const CurrentVersion = 2
 
 // DefaultPath is where Arrsenal keeps everything it owns (DESIGN.md §1).
 const DefaultPath = "/opt/arrsenal/arrsenal.yaml"
@@ -65,6 +67,14 @@ type State struct {
 	DataRoot    string `yaml:"data_root"`
 	AppdataRoot string `yaml:"appdata_root"`
 
+	// DownloadsRoot optionally splits the download trees (usenet, torrents)
+	// onto their own filesystem — the NVMe-scratch + big-array topology.
+	// Empty means everything lives under DataRoot (the default, whose
+	// same-filesystem hardlink imports remain the recommendation). Container
+	// paths never change either way (issue #59): /data/media, /data/usenet,
+	// /data/torrents — only the host side of the mounts moves.
+	DownloadsRoot string `yaml:"downloads_root,omitempty"`
+
 	GPU GPUMode `yaml:"gpu"`
 
 	// PortRemaps overrides default host ports: app ID → container port →
@@ -95,6 +105,21 @@ func New() *State {
 		AppdataRoot: "/opt/appdata",
 		GPU:         GPUNone,
 	}
+}
+
+// EffectiveDownloadsRoot is where the download trees live: the explicit
+// split root when set, DataRoot otherwise.
+func (s *State) EffectiveDownloadsRoot() string {
+	if s.DownloadsRoot != "" {
+		return s.DownloadsRoot
+	}
+	return s.DataRoot
+}
+
+// SplitStorage reports whether downloads intentionally live on a different
+// root than media — the informed-choice copy-mode topology.
+func (s *State) SplitStorage() bool {
+	return s.DownloadsRoot != "" && s.DownloadsRoot != s.DataRoot
 }
 
 // HostPort resolves the effective host port for one of an app's published
@@ -190,6 +215,11 @@ func tightenPermissions(path string) {
 // fsynced) with 0600 permissions, creating the parent directory 0700 if
 // needed. Marshalling is deterministic: identical state, identical bytes.
 func (s *State) Save(path string) error {
+	// Files always leave this binary at ITS schema version: a v1 file that
+	// gained a v2 field but kept "version: 1" would load cleanly in an old
+	// binary — which would then drop the field on its next save. Stamping
+	// the version makes the old binary refuse instead (upgrade message).
+	s.Version = CurrentVersion
 	if err := s.Validate(); err != nil {
 		return fmt.Errorf("refusing to save invalid state: %w", err)
 	}
@@ -275,7 +305,11 @@ func (s *State) Validate() error {
 	if strings.ContainsAny(s.TZ, "#\n\r") || strings.TrimSpace(s.TZ) != s.TZ {
 		return fmt.Errorf("tz %q contains characters that would corrupt the generated .env", s.TZ)
 	}
-	for name, p := range map[string]string{"data_root": s.DataRoot, "appdata_root": s.AppdataRoot} {
+	roots := map[string]string{"data_root": s.DataRoot, "appdata_root": s.AppdataRoot}
+	if s.DownloadsRoot != "" {
+		roots["downloads_root"] = s.DownloadsRoot
+	}
+	for name, p := range roots {
 		if !strings.HasPrefix(p, "/") {
 			return fmt.Errorf("%s %q must be an absolute path", name, p)
 		}

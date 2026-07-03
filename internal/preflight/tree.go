@@ -9,21 +9,27 @@ import (
 	"github.com/Haroutio/arrsenal/internal/state"
 )
 
-// DataSubdirs is the fixed TRaSH-style layout under the data root
-// (DESIGN.md §5.4). Torrent dirs match the download clients' category
-// dirs; usenet keeps SABnzbd's complete/incomplete split. The container-
-// internal layout is fixed — that opinion is what keeps the wiring
-// engine's root-folder calls deterministic.
-var DataSubdirs = []string{
-	"media/tv",
-	"media/movies",
-	"media/music",
-	"usenet/complete",
-	"usenet/incomplete",
-	"torrents/tv",
-	"torrents/movies",
-	"torrents/music",
-}
+// MediaSubdirs and DownloadSubdirs are the fixed TRaSH-style layout
+// (DESIGN.md §5.4). Torrent dirs match the download clients' category dirs;
+// usenet keeps SABnzbd's complete/incomplete split. The container-internal
+// layout is fixed — that opinion is what keeps the wiring engine's
+// root-folder calls deterministic. The two groups may live under one root
+// (default: hardlink imports) or split roots (issue #59: NVMe scratch +
+// big-array media, copy-mode imports by choice).
+var (
+	MediaSubdirs = []string{
+		"media/tv",
+		"media/movies",
+		"media/music",
+	}
+	DownloadSubdirs = []string{
+		"usenet/complete",
+		"usenet/incomplete",
+		"torrents/tv",
+		"torrents/movies",
+		"torrents/music",
+	}
+)
 
 // CreatedDir records one directory EnsureTree touched, for the run report.
 type CreatedDir struct {
@@ -47,8 +53,11 @@ func EnsureTree(s *state.State) ([]CreatedDir, error) {
 	dirMode := dirModeFromUmask(s.Umask)
 
 	var targets []string
-	for _, sub := range DataSubdirs {
+	for _, sub := range MediaSubdirs {
 		targets = append(targets, filepath.Join(s.DataRoot, sub))
+	}
+	for _, sub := range DownloadSubdirs {
+		targets = append(targets, filepath.Join(s.EffectiveDownloadsRoot(), sub))
 	}
 	for _, id := range s.Apps {
 		targets = append(targets, filepath.Join(s.AppdataRoot, id))

@@ -112,7 +112,12 @@ Runs after the TUI, before anything is written or started:
 4. **Directory tree** — the TRaSH layout (`media/{tv,movies,music}`,
    `usenet/{complete,incomplete}`, `torrents/{tv,movies,music}` matching the download
    clients' category dirs) is created with
-   correct ownership, and validated for writability, before first boot. The
+   correct ownership, and validated for writability, before first boot.
+   An optional **downloads root** may split the download trees onto their own
+   filesystem (SSD scratch + big-array media): container paths never change, only the
+   host side of the mounts, so wiring is unaffected. Splitting trades hardlink imports
+   for copy-mode — presented as the informed choice it is, not a warning. The
+   single-root hardlink layout remains the default and the recommendation. The
    container-internal layout is **fixed** — that's the opinion in "opinionated
    installer," and it keeps the wiring engine's root-folder calls deterministic.
 
