@@ -129,6 +129,11 @@ type App struct {
 	Env        map[string]string
 	Mounts     []Mount
 	Key        KeySource // where the app's self-generated API key lands
+	// MediaDir names a PVR's slice of the media tree ("tv", "movies",
+	// "music"): its root folder is /data/media/<MediaDir> and its download
+	// category is <MediaDir> in both clients. One word keeps the whole
+	// hardlink pipeline aligned (DESIGN.md §5.4, §7.4).
+	MediaDir   string
 	WiringTier WiringTier
 	BootPhase  BootPhase
 	GPU        bool     // can take the transcode device (DESIGN.md §8)
@@ -237,6 +242,9 @@ func Validate() error {
 		if a.WebPortEnv != "" && a.Web.Container != a.Web.Host {
 			return fmt.Errorf("app %q: WebPortEnv requires a symmetric default web mapping, got %d:%d",
 				a.ID, a.Web.Host, a.Web.Container)
+		}
+		if (a.Role == RolePVR) != (a.MediaDir != "") {
+			return fmt.Errorf("app %q: MediaDir is required for PVRs and forbidden elsewhere", a.ID)
 		}
 		for _, p := range append([]PortMap{a.Web}, a.ExtraPorts...) {
 			if p.Container <= 0 || p.Host <= 0 {
