@@ -50,6 +50,17 @@ jobs:
         with:
           go-version: stable
       - run: go build -o arrsenal ./cmd/arrsenal
+      # Shared-runner IPs get registry rate limits (toomanyrequests) in
+      # bursts; pre-pull with backoff so the product run never eats the flake.
+      - name: pre-pull images with retry
+        run: |
+          for image in lscr.io/linuxserver/sonarr:latest lscr.io/linuxserver/sabnzbd:latest; do
+            for attempt in 1 2 3 4; do
+              docker pull --quiet "$image" && break
+              echo "pull $image failed (attempt $attempt), backing off…"
+              sleep $((attempt * 20))
+            done
+          done
       - name: headless install brings the stack up
         run: |
           ./arrsenal --yes --apps sonarr,sabnzbd --gpu none \
