@@ -104,7 +104,9 @@ resolve_version() {
   local location
   location=$(curl -fsSLI -o /dev/null -w '%{url_effective}' "https://github.com/$REPO/releases/latest")
   local tag="${location##*/}"
-  [ -n "$tag" ] && [ "$tag" != "releases" ] || die "cannot resolve the latest release — no releases published yet?"
+  if [ -z "$tag" ] || [ "$tag" = "releases" ]; then
+    die "cannot resolve the latest release — no releases published yet?"
+  fi
   echo "$tag"
 }
 
