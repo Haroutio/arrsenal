@@ -79,9 +79,7 @@ jobs:
         run: |
           # Docker stubbed present; the binary download, checksum verify, and
           # install are the real thing on this distro's userland.
-          printf '#!/bin/sh
-exit 0
-' > /usr/local/bin/docker && chmod +x /usr/local/bin/docker
+          printf '#!/bin/sh\nexit 0\n' > /usr/local/bin/docker && chmod +x /usr/local/bin/docker
           ARRSENAL_YES=1 ARRSENAL_NO_EXEC=1 bash install.sh
           test -x /usr/local/bin/arrsenal
           /usr/local/bin/arrsenal --help >/dev/null
