@@ -21,6 +21,12 @@ type parsedInstance struct {
 			Enabled bool `yaml:"enabled"`
 		} `yaml:"reset_unmatched_scores"`
 	} `yaml:"quality_profiles"`
+	CustomFormatGroups struct {
+		Add []struct {
+			TrashID string   `yaml:"trash_id"`
+			Select  []string `yaml:"select"`
+		} `yaml:"add"`
+	} `yaml:"custom_format_groups"`
 }
 
 func instanceFrom(t *testing.T, out []byte, kind string) *parsedInstance {
@@ -117,6 +123,60 @@ func TestInstanceShape(t *testing.T) {
 		if !p.ResetUnmatchedScores.Enabled {
 			t.Fatalf("profile %s must reset unmatched scores (the official templates do)", p.TrashID)
 		}
+	}
+}
+
+// The groups mirror the ACTIVE custom_format_groups blocks of the official
+// v8 templates. The load-bearing detail: selects like BR-DISK (BTN)
+// carry no default flag in the guides, so they sync ONLY when named here —
+// dropping the block silently diverges from the official templates (audit
+// finding).
+func TestCustomFormatGroupsMatchOfficialTemplates(t *testing.T) {
+	groupsOf := func(i *parsedInstance) map[string][]string {
+		m := map[string][]string{}
+		for _, g := range i.CustomFormatGroups.Add {
+			m[g.TrashID] = g.Select
+		}
+		return m
+	}
+
+	hd, err := RecyclarrConfig(Answers{Resolution: "1080p", Source: "bluray-web"},
+		inst("http://sonarr:8989"), inst("http://radarr:7878"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	son := groupsOf(instanceFrom(t, hd, "sonarr"))
+	rad := groupsOf(instanceFrom(t, hd, "radarr"))
+
+	if got := son["158188097a58d7687dee647e04af0da3"]; len(got) != 1 || got[0] != "47435ece6b99a0b477caf360e79ba0bb" {
+		t.Fatalf("sonarr 1080p golden rule = %v, want the x265 (HD) select", got)
+	}
+	unwanted := son["59c3af66780d08332fdc64e68297098f"]
+	if len(unwanted) != 8 {
+		t.Fatalf("sonarr unwanted selects = %d, want 8 (the official template's list)", len(unwanted))
+	}
+	if strings.Join(unwanted, ",") == "" || !strings.Contains(strings.Join(unwanted, ","), "6f808933a71bd9666531610cb8c059cc") {
+		t.Fatalf("BR-DISK (BTN) missing from sonarr unwanted selects: %v", unwanted)
+	}
+	if got := rad["a3ac6af01d78e4f21fcb75f601ac96df"]; len(got) != 11 {
+		t.Fatalf("radarr unwanted selects = %d, want 11 (the official template's list)", len(got))
+	}
+	if _, hasUHD := son["e3f37512790f00d0e89e54fe5e790d1c"]; hasUHD {
+		t.Fatal("1080p config must not carry the UHD golden rule")
+	}
+
+	uhd, err := RecyclarrConfig(Answers{Resolution: "2160p", Source: "bluray-web"},
+		inst("http://sonarr:8989"), inst("http://radarr:7878"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	sonUHD := groupsOf(instanceFrom(t, uhd, "sonarr"))
+	radUHD := groupsOf(instanceFrom(t, uhd, "radarr"))
+	if got := sonUHD["e3f37512790f00d0e89e54fe5e790d1c"]; len(got) != 1 || got[0] != "9b64dff695c2115facf1b6ea59c9bd07" {
+		t.Fatalf("sonarr 2160p golden rule = %v, want the x265 (no HDR/DV) select", got)
+	}
+	if got := radUHD["ff204bbcecdd487d1cefcefdbf0c278d"]; len(got) != 1 || got[0] != "839bea857ed2c0a8e084f3cbdbd65ecb" {
+		t.Fatalf("radarr 2160p golden rule = %v, want the x265 (no HDR/DV) select", got)
 	}
 }
 

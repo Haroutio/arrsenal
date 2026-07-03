@@ -276,20 +276,22 @@ func runTRaSH(spec Spec, keys map[string]string) []Result {
 	}
 
 	out, err := spec.RunRecyclarr()
-	// Never let an echoed key reach the report.
-	for _, k := range keys {
-		out = strings.ReplaceAll(out, k, "[redacted]")
-	}
 	if err != nil {
-		// A failed sync's tail is the user's only diagnostic; Recyclarr's
-		// fatal line often trails a longer root cause (e.g. a repo-clone
-		// error), so keep enough of it.
-		tail := out
-		if len(tail) > 2000 {
-			tail = tail[len(tail)-2000:]
+		// On failure dockerx returns empty output and embeds the container's
+		// full combined output inside the error itself — so redaction must
+		// cover BOTH, or a sync error that quotes the config's api_key lines
+		// walks straight into the report (audit finding). The tail is the
+		// user's only diagnostic; Recyclarr's fatal line often trails a
+		// longer root cause (e.g. a repo-clone error), so keep enough of it.
+		detail := fmt.Sprintf("%v\n%s", err, out)
+		for _, k := range keys {
+			detail = strings.ReplaceAll(detail, k, "[redacted]")
+		}
+		if len(detail) > 2000 {
+			detail = detail[len(detail)-2000:]
 		}
 		return []Result{{Connection: conn, Outcome: OutcomeFailed,
-			Detail: fmt.Sprintf("recyclarr sync failed: %v\n%s", err, tail)}}
+			Detail: "recyclarr sync failed: " + detail}}
 	}
 	var results []Result
 	if sonarr != nil {
