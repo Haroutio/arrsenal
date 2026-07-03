@@ -115,6 +115,28 @@ func (s *State) WebHostPort(app registry.App) int {
 	return s.HostPort(app, app.Web)
 }
 
+// WebPorts resolves both sides of an app's web mapping. For apps whose web
+// port must look the same inside and outside the container (WebPortEnv —
+// qBittorrent's CSRF validation), a remap moves the container side too;
+// everyone else keeps their registry container port. Remaps are always keyed
+// by the REGISTRY container port, even when the effective one moves.
+func (s *State) WebPorts(app registry.App) (host, container int) {
+	host = s.WebHostPort(app)
+	container = app.Web.Container
+	if app.WebPortEnv != "" {
+		container = host
+	}
+	return host, container
+}
+
+// HostNetworked reports whether an app runs on host networking instead of
+// the bridge. The one home for the rule — generation and validation must
+// never disagree about it. Jellyfin-only until the registry grows a
+// host-network capability for Plex/Emby in v0.3 (DESIGN.md §6).
+func (s *State) HostNetworked(id string) bool {
+	return id == "jellyfin" && s.JellyfinHostNetwork
+}
+
 // ErrNotExist reports that no state file exists yet — a fresh install, not a
 // failure. Callers test with errors.Is.
 var ErrNotExist = errors.New("state file does not exist")
@@ -248,9 +270,17 @@ func (s *State) Validate() error {
 	if !umaskRe.MatchString(s.Umask) {
 		return fmt.Errorf("umask %q is not a 3-digit octal string like \"002\"", s.Umask)
 	}
+	// TZ and the roots land verbatim in .env and volume specs; constrain the
+	// character set here so generation can stay escape-free.
+	if strings.ContainsAny(s.TZ, "#\n\r") || strings.TrimSpace(s.TZ) != s.TZ {
+		return fmt.Errorf("tz %q contains characters that would corrupt the generated .env", s.TZ)
+	}
 	for name, p := range map[string]string{"data_root": s.DataRoot, "appdata_root": s.AppdataRoot} {
 		if !strings.HasPrefix(p, "/") {
 			return fmt.Errorf("%s %q must be an absolute path", name, p)
+		}
+		if strings.ContainsAny(p, ":#\n\r\t ") {
+			return fmt.Errorf("%s %q contains characters that would corrupt volume specs or .env (no colons, hashes, or whitespace)", name, p)
 		}
 	}
 	switch s.GPU {
@@ -279,21 +309,28 @@ func (s *State) Validate() error {
 		}
 	}
 
-	// Effective host ports across the selection must be collision-free.
+	// Effective host ports across the selection must be collision-free. A
+	// host-networked app publishes nothing on the bridge but binds its
+	// CONTAINER ports directly on the host — those are claims too, and
+	// remaps cannot move them.
 	type claim struct{ app, purpose string }
 	taken := map[string]claim{} // "host/protocol"
 	for _, id := range s.Apps {
 		app, _ := registry.ByID(id)
-		if id == "jellyfin" && s.JellyfinHostNetwork {
-			continue // host networking publishes nothing on the bridge
-		}
+		hostNet := s.HostNetworked(id)
 		for _, p := range append([]registry.PortMap{app.Web}, app.ExtraPorts...) {
-			key := fmt.Sprintf("%d/%s", s.HostPort(app, p), p.Protocol)
+			hostPort := s.HostPort(app, p)
+			purpose := p.Purpose
+			if hostNet {
+				hostPort = p.Container
+				purpose += " (host networking — not remappable)"
+			}
+			key := fmt.Sprintf("%d/%s", hostPort, p.Protocol)
 			if prev, dup := taken[key]; dup {
 				return fmt.Errorf("host port %s claimed by both %s (%s) and %s (%s) — remap one of them",
-					key, prev.app, prev.purpose, id, p.Purpose)
+					key, prev.app, prev.purpose, id, purpose)
 			}
-			taken[key] = claim{app: id, purpose: p.Purpose}
+			taken[key] = claim{app: id, purpose: purpose}
 		}
 	}
 	return nil

@@ -248,6 +248,10 @@ func TestValidateRejectsBadStates(t *testing.T) {
 		"empty tz":           func(s *State) { s.TZ = "" },
 		"decimal umask":      func(s *State) { s.Umask = "22" },
 		"relative path":      func(s *State) { s.DataRoot = "data" },
+		"colon in path":      func(s *State) { s.DataRoot = "/mnt/a:b" },
+		"space in path":      func(s *State) { s.AppdataRoot = "/opt/app data" },
+		"newline in tz":      func(s *State) { s.TZ = "Etc/UTC\nEVIL=1" },
+		"hash in tz":         func(s *State) { s.TZ = "Etc/UTC # comment" },
 		"bad gpu":            func(s *State) { s.GPU = "voodoo2" },
 		"remap unknown app":  func(s *State) { s.PortRemaps["plex"] = map[int]int{32400: 32400} },
 		"remap unknown port": func(s *State) { s.PortRemaps["sonarr"] = map[int]int{1234: 5678} },
@@ -272,18 +276,42 @@ func TestValidateRejectsBadStates(t *testing.T) {
 	}
 }
 
-func TestJellyfinHostNetworkFreesItsPorts(t *testing.T) {
-	// With Jellyfin on host networking it publishes nothing on the bridge,
-	// so another app may take 8096 without a validation conflict.
+func TestJellyfinHostNetworkStillOwnsItsHostPorts(t *testing.T) {
+	// Host networking publishes nothing on the bridge, but Jellyfin binds
+	// 8096/7359 directly on the host — another app moved onto 8096 still
+	// collides at `up`, so Validate must still reject it.
 	s := full()
 	s.JellyfinHostNetwork = true
 	s.PortRemaps["sonarr"] = map[int]int{8989: 8096}
-	if err := s.Validate(); err != nil {
-		t.Fatalf("host-networked jellyfin must not claim bridge ports: %v", err)
+	err := s.Validate()
+	if err == nil {
+		t.Fatal("host-networked jellyfin binds host 8096; sonarr remapped onto it must be rejected")
 	}
-	s.JellyfinHostNetwork = false
+	if !strings.Contains(err.Error(), "host networking") {
+		t.Fatalf("the error should say the port is owned via host networking: %v", err)
+	}
+	// And jellyfin's own remaps are meaningless in host mode: the claim
+	// stays on the container port.
+	s = full()
+	s.JellyfinHostNetwork = true
+	s.PortRemaps["jellyfin"] = map[int]int{8096: 18096}
+	s.PortRemaps["sonarr"] = map[int]int{8989: 8096}
 	if err := s.Validate(); err == nil {
-		t.Fatal("bridge-mode jellyfin claims 8096; sonarr remapped onto it must be rejected")
+		t.Fatal("remapping a host-networked app must not free its real host port")
+	}
+}
+
+func TestWebPortsFollowHostForWebPortEnvApps(t *testing.T) {
+	s := full()
+	qb, _ := lookApp(t, "qbittorrent")
+	host, container := s.WebPorts(qb)
+	if host != 9091 || container != 9091 {
+		t.Fatalf("qbittorrent WebPorts = %d:%d, want 9091:9091 — WEBUI_PORT apps move both sides", host, container)
+	}
+	son, _ := lookApp(t, "sonarr")
+	host, container = s.WebPorts(son)
+	if host != 9989 || container != 8989 {
+		t.Fatalf("sonarr WebPorts = %d:%d, want 9989:8989 — normal apps keep their container port", host, container)
 	}
 }
 
