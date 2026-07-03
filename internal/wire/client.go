@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/cookiejar"
 	"strings"
 	"time"
 )
@@ -74,6 +75,16 @@ func NewClient(base, apiKey, keyHeader string) *Client {
 		attempts: 4,
 		backoff:  2 * time.Second,
 	}
+}
+
+// WithCookies gives the client a session jar. Seerr's init flow is
+// session-cookie authenticated: the sign-in response sets the cookie every
+// later setup call must carry.
+func (c *Client) WithCookies() *Client {
+	if jar, err := cookiejar.New(nil); err == nil {
+		c.http.Jar = jar
+	}
+	return c
 }
 
 // ErrAuth means the app rejected our key — almost always a stale or foreign
