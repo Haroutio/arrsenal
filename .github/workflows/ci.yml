@@ -122,9 +122,34 @@ jobs:
             echo "sabnzbd container should have been reconciled away" && exit 1
           fi
           test -d /tmp/arrtest/appdata/sabnzbd || (echo "appdata must be preserved" && exit 1)
+      - name: uninstall is reversible by default
+        run: |
+          ./arrsenal uninstall --state /tmp/arrtest/arrsenal.yaml --artifacts-dir /tmp/arrtest
+          if docker ps -a --format '{{.Names}}' | grep -xE 'prowlarr|sonarr'; then
+            echo "containers should be gone" && exit 1
+          fi
+          test -d /tmp/arrtest/appdata/sonarr || (echo "appdata must survive default uninstall" && exit 1)
+          test -f /tmp/arrtest/arrsenal.yaml || (echo "state must survive default uninstall" && exit 1)
+      - name: purge without the typed confirmation aborts and deletes nothing
+        run: |
+          if echo "no thanks" | ./arrsenal uninstall --purge \
+              --state /tmp/arrtest/arrsenal.yaml --artifacts-dir /tmp/arrtest; then
+            echo "purge must fail without confirmation" && exit 1
+          fi
+          test -d /tmp/arrtest/appdata/sonarr || (echo "aborted purge deleted appdata!" && exit 1)
+          test -f /tmp/arrtest/arrsenal.yaml || (echo "aborted purge deleted state!" && exit 1)
+      - name: purge with confirmation deletes exactly the managed scope
+        run: |
+          touch /tmp/arrtest/appdata/NOT-ARRSENALS.txt   # a foreign neighbor in the appdata root
+          echo "purge" | ./arrsenal uninstall --purge \
+            --state /tmp/arrtest/arrsenal.yaml --artifacts-dir /tmp/arrtest
+          if [ -d /tmp/arrtest/appdata/sonarr ]; then echo "purge left app config" && exit 1; fi
+          if [ -f /tmp/arrtest/arrsenal.yaml ]; then echo "purge left state" && exit 1; fi
+          test -f /tmp/arrtest/appdata/NOT-ARRSENALS.txt || (echo "purge overreached beyond managed apps!" && exit 1)
+          test -d /tmp/arrtest/data/media || (echo "purge touched the data root!" && exit 1)
       - name: teardown
         if: always()
-        run: cd /tmp/arrtest && docker compose down --remove-orphans || true
+        run: cd /tmp/arrtest 2>/dev/null && docker compose down --remove-orphans || true
 
   # Proves the release pipeline on every PR without tagging anything:
   # a full snapshot build must produce both linux binaries + checksums.

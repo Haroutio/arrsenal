@@ -35,8 +35,10 @@ func main() {
 		err = run(*opts)
 	case "update":
 		err = runUpdate(*opts)
+	case "uninstall":
+		err = runUninstall(*opts, opts.purge)
 	default:
-		err = fmt.Errorf("unknown command %q (commands: update; no command = install/reconfigure)", command)
+		err = fmt.Errorf("unknown command %q (commands: update, uninstall; no command = install/reconfigure)", command)
 	}
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "arrsenal: %v\n", err)
@@ -59,6 +61,7 @@ type options struct {
 	skipWiring   bool
 	adminUser    string
 	adminPass    string
+	purge        bool
 }
 
 // parseFlags returns nil when the invocation was informational (--version).
@@ -83,6 +86,7 @@ func parseFlags(args []string, out *os.File) *options {
 	fs.BoolVar(&o.skipWiring, "skip-wiring", false, "bring containers up but skip the API auto-wiring pass")
 	fs.StringVar(&o.adminUser, "admin-user", "admin", "admin username applied to the apps during wiring")
 	fs.StringVar(&o.adminPass, "admin-pass", "", "admin password for wiring (headless; interactive mode prompts)")
+	fs.BoolVar(&o.purge, "purge", false, "with the uninstall command: also delete app configs, state, and artifacts (typed confirmation required)")
 	_ = fs.Parse(args)
 
 	if *showVersion {
