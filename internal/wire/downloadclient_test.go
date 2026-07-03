@@ -64,7 +64,7 @@ func TestEnsureDownloadClientSABnzbd(t *testing.T) {
 	defer srv.Close()
 
 	r := EnsureDownloadClient(context.Background(), wireClient(srv.URL), DownloadClientTarget{
-		ArrName: "Sonarr", ClientName: "SABnzbd", Implementation: "Sabnzbd",
+		APIBase: "/api/v3", ArrName: "Sonarr", ClientName: "SABnzbd", Implementation: "Sabnzbd",
 		Host: "sabnzbd", Port: 8080, Category: "tv", APIKey: "sab-key",
 	})
 	if r.Outcome != OutcomeWired || f.posts.Load() != 1 {
@@ -89,7 +89,7 @@ func TestEnsureDownloadClientQBittorrentCategoryDiscipline(t *testing.T) {
 	defer srv.Close()
 
 	r := EnsureDownloadClient(context.Background(), wireClient(srv.URL), DownloadClientTarget{
-		ArrName: "Sonarr", ClientName: "qBittorrent", Implementation: "QBittorrent",
+		APIBase: "/api/v3", ArrName: "Sonarr", ClientName: "qBittorrent", Implementation: "QBittorrent",
 		Host: "qbittorrent", Port: 8081, Category: "tv",
 		Username: "admin", Password: "qbit-pass-SECRET",
 	})
@@ -114,7 +114,7 @@ func TestEnsureDownloadClientExistingZeroWrites(t *testing.T) {
 	defer srv.Close()
 
 	r := EnsureDownloadClient(context.Background(), wireClient(srv.URL), DownloadClientTarget{
-		ArrName: "Sonarr", ClientName: "SABnzbd", Implementation: "Sabnzbd",
+		APIBase: "/api/v3", ArrName: "Sonarr", ClientName: "SABnzbd", Implementation: "Sabnzbd",
 	})
 	if r.Outcome != OutcomeExisted || f.posts.Load() != 0 {
 		t.Fatalf("existing client must short-circuit: %+v posts=%d", r, f.posts.Load())
@@ -128,7 +128,7 @@ func TestEnsureRootFolder(t *testing.T) {
 	defer srv.Close()
 
 	// Existing path → zero writes.
-	r := EnsureRootFolder(context.Background(), wireClient(srv.URL), "Sonarr", "/data/media/tv")
+	r := EnsureRootFolder(context.Background(), wireClient(srv.URL), "/api/v3", "Sonarr", "/data/media/tv")
 	if r.Outcome != OutcomeExisted {
 		t.Fatalf("existing root folder: %+v", r)
 	}
@@ -148,11 +148,34 @@ func TestEnsureRootFolder(t *testing.T) {
 	srv2 := httptest.NewServer(mux)
 	defer srv2.Close()
 
-	r = EnsureRootFolder(context.Background(), wireClient(srv2.URL), "Sonarr", "/data/media/tv")
+	r = EnsureRootFolder(context.Background(), wireClient(srv2.URL), "/api/v3", "Sonarr", "/data/media/tv")
 	if r.Outcome != OutcomeWired || rfPosts.Load() != 1 {
 		t.Fatalf("fresh root folder must be created: %+v posts=%d", r, rfPosts.Load())
 	}
 	if !strings.Contains(r.Connection, "/data/media/tv") {
 		t.Fatalf("report label should carry the path: %s", r.Connection)
+	}
+}
+
+// Lidarr speaks /api/v1 — the family is not uniform, and assuming v3 handed
+// a real install three 404s. The base must reach every request.
+func TestEnsureLidarrUsesAPIV1(t *testing.T) {
+	var v1Hits atomic.Int32
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/v1/rootfolder", func(w http.ResponseWriter, _ *http.Request) {
+		v1Hits.Add(1)
+		_, _ = w.Write([]byte(`[]`))
+	})
+	mux.HandleFunc("POST /api/v1/rootfolder", func(w http.ResponseWriter, _ *http.Request) {
+		v1Hits.Add(1)
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{}`))
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	r := EnsureRootFolder(context.Background(), wireClient(srv.URL), "/api/v1", "Lidarr", "/data/media/music")
+	if r.Outcome != OutcomeWired || v1Hits.Load() != 2 {
+		t.Fatalf("lidarr root folder must ride /api/v1: %+v hits=%d", r, v1Hits.Load())
 	}
 }

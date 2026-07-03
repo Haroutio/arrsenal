@@ -105,18 +105,13 @@ func Orchestrate(ctx context.Context, spec Spec) []Result {
 	// fresh (adopted auth is the user's).
 	if spec.AdminPass != "" {
 		for _, a := range spec.Apps {
-			apiBase := ""
-			switch {
-			case a.Role == registry.RolePVR:
-				apiBase = "/api/v3"
-			case a.ID == "prowlarr":
-				apiBase = "/api/v1"
-			}
-			if apiBase == "" || keys[a.ID] == "" {
+			// The registry knows each arr's API prefix — v3 and v1 coexist
+			// in the family, and guessing v3 404'd Lidarr (field report).
+			if a.APIBase == "" || keys[a.ID] == "" {
 				continue
 			}
 			results = append(results,
-				EnsureAuth(ctx, arrClient(a.ID), a.Name, apiBase, spec.AdminUser, spec.AdminPass, spec.Adopted[a.ID]))
+				EnsureAuth(ctx, arrClient(a.ID), a.Name, a.APIBase, spec.AdminUser, spec.AdminPass, spec.Adopted[a.ID]))
 		}
 	}
 
@@ -141,19 +136,19 @@ func Orchestrate(ctx context.Context, spec Spec) []Result {
 
 		if sabSelected && sabReady {
 			results = append(results, EnsureDownloadClient(ctx, c, DownloadClientTarget{
-				ArrName: a.Name, ClientName: "SABnzbd", Implementation: "Sabnzbd",
+				ArrName: a.Name, APIBase: a.APIBase, ClientName: "SABnzbd", Implementation: "Sabnzbd",
 				Host: "sabnzbd", Port: 8080, Category: a.MediaDir, APIKey: keys["sabnzbd"],
 			}))
 		}
 		if qbitSelected && spec.QBitPass != "" {
 			results = append(results, EnsureDownloadClient(ctx, c, DownloadClientTarget{
-				ArrName: a.Name, ClientName: "qBittorrent", Implementation: "QBittorrent",
+				ArrName: a.Name, APIBase: a.APIBase, ClientName: "qBittorrent", Implementation: "QBittorrent",
 				Host: spec.QBitHost, Port: spec.QBitContainerPort, Category: a.MediaDir,
 				Username: "admin", Password: spec.QBitPass,
 			}))
 		}
 
-		results = append(results, EnsureRootFolder(ctx, c, a.Name, "/data/media/"+a.MediaDir))
+		results = append(results, EnsureRootFolder(ctx, c, a.APIBase, a.Name, "/data/media/"+a.MediaDir))
 	}
 
 	// 5. Jellyfin lane.
