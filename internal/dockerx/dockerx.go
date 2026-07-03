@@ -60,7 +60,10 @@ func (d *Docker) Available() error {
 // is how preflight tells "someone else's sonarr" from "ours, from the
 // previous run" (DESIGN.md §4).
 func (d *Docker) Containers() (map[string]string, error) {
-	out, err := d.run("ps", "-a", "--format", `{{.Names}}\t{{.Label "com.docker.compose.project"}}`)
+	// "|" as separator: container names cannot contain it, and a raw-string
+	// "\t" here would be a LITERAL backslash-t in the docker template — a
+	// bug the integration test caught in the wild.
+	out, err := d.run("ps", "-a", "--format", `{{.Names}}|{{.Label "com.docker.compose.project"}}`)
 	if err != nil {
 		return nil, err
 	}
@@ -70,7 +73,7 @@ func (d *Docker) Containers() (map[string]string, error) {
 		if line == "" {
 			continue
 		}
-		name, project, _ := strings.Cut(line, "\t")
+		name, project, _ := strings.Cut(line, "|")
 		containers[name] = project
 	}
 	return containers, nil

@@ -101,13 +101,14 @@ func failDetail(app, status, health string) string {
 	return fmt.Sprintf("%s is %s — check: docker logs %s", app, s, app)
 }
 
-// containerState returns docker's view of one container.
+// containerState returns docker's view of one container. "|" separator for
+// the same reason as Containers: no escape-sequence ambiguity.
 func (d *Docker) containerState(name string) (status, health string, err error) {
 	out, err := d.run("inspect", "--format",
-		`{{.State.Status}}\t{{if .State.Health}}{{.State.Health.Status}}{{end}}`, name)
+		`{{.State.Status}}|{{if .State.Health}}{{.State.Health.Status}}{{end}}`, name)
 	if err != nil {
 		return "", "", err
 	}
-	status, health, _ = strings.Cut(strings.TrimSpace(out), "\t")
+	status, health, _ = strings.Cut(strings.TrimSpace(out), "|")
 	return status, health, nil
 }
