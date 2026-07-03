@@ -64,6 +64,7 @@ var apps = []App{
 		Image:       "lscr.io/linuxserver/prowlarr",
 		Tag:         "latest",
 		Identity:    IdentityEnvPUIDGID,
+		Key:         KeySource{File: "config.xml", Format: KeyXMLApiKey},
 		Web:         PortMap{Container: 9696, Host: 9696, Protocol: "tcp", Purpose: "web UI"},
 		Mounts: []Mount{
 			{Kind: SourceAppdata, Target: "/config"},
@@ -79,6 +80,7 @@ var apps = []App{
 		Image:       "lscr.io/linuxserver/sonarr",
 		Tag:         "latest",
 		Identity:    IdentityEnvPUIDGID,
+		Key:         KeySource{File: "config.xml", Format: KeyXMLApiKey},
 		Web:         PortMap{Container: 8989, Host: 8989, Protocol: "tcp", Purpose: "web UI"},
 		Mounts: []Mount{
 			{Kind: SourceAppdata, Target: "/config"},
@@ -95,6 +97,7 @@ var apps = []App{
 		Image:       "lscr.io/linuxserver/radarr",
 		Tag:         "latest",
 		Identity:    IdentityEnvPUIDGID,
+		Key:         KeySource{File: "config.xml", Format: KeyXMLApiKey},
 		Web:         PortMap{Container: 7878, Host: 7878, Protocol: "tcp", Purpose: "web UI"},
 		Mounts: []Mount{
 			{Kind: SourceAppdata, Target: "/config"},
@@ -111,6 +114,7 @@ var apps = []App{
 		Image:       "lscr.io/linuxserver/lidarr",
 		Tag:         "latest",
 		Identity:    IdentityEnvPUIDGID,
+		Key:         KeySource{File: "config.xml", Format: KeyXMLApiKey},
 		Web:         PortMap{Container: 8686, Host: 8686, Protocol: "tcp", Purpose: "web UI"},
 		Mounts: []Mount{
 			{Kind: SourceAppdata, Target: "/config"},
@@ -143,6 +147,7 @@ var apps = []App{
 		Image:       "lscr.io/linuxserver/sabnzbd",
 		Tag:         "latest",
 		Identity:    IdentityEnvPUIDGID,
+		Key:         KeySource{File: "sabnzbd.ini", Format: KeyINIApiKey},
 		Web:         PortMap{Container: 8080, Host: 8080, Protocol: "tcp", Purpose: "web UI"},
 		Mounts: []Mount{
 			{Kind: SourceAppdata, Target: "/config"},
