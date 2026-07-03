@@ -35,21 +35,43 @@ func templatesFrom(t *testing.T, out []byte, kind string) []string {
 }
 
 func TestTemplateMapping(t *testing.T) {
+	sonarrSet := func(res string, anime bool) []string {
+		t := []string{
+			"sonarr-quality-definition-series",
+			"sonarr-v4-quality-profile-web-" + res,
+			"sonarr-v4-custom-formats-web-" + res,
+		}
+		if anime {
+			t = append(t, "sonarr-v4-quality-profile-anime", "sonarr-v4-custom-formats-anime")
+		}
+		return t
+	}
+	radarrSet := func(main string, anime bool) []string {
+		t := []string{
+			"radarr-quality-definition-movie",
+			"radarr-quality-profile-" + main,
+			"radarr-custom-formats-" + main,
+		}
+		if anime {
+			t = append(t, "radarr-quality-profile-anime", "radarr-custom-formats-anime")
+		}
+		return t
+	}
 	cases := []struct {
 		a          Answers
 		wantSonarr []string
 		wantRadarr []string
 	}{
 		{Answers{Resolution: "1080p", Source: "bluray-web"},
-			[]string{"web-1080p-v4"}, []string{"hd-bluray-web"}},
+			sonarrSet("1080p", false), radarrSet("hd-bluray-web", false)},
 		{Answers{Resolution: "2160p", Source: "bluray-web"},
-			[]string{"web-2160p-v4"}, []string{"uhd-bluray-web"}},
+			sonarrSet("2160p", false), radarrSet("uhd-bluray-web", false)},
 		{Answers{Resolution: "1080p", Source: "remux"},
-			[]string{"web-1080p-v4"}, []string{"remux-web-1080p"}},
+			sonarrSet("1080p", false), radarrSet("remux-web-1080p", false)},
 		{Answers{Resolution: "2160p", Source: "remux"},
-			[]string{"web-2160p-v4"}, []string{"remux-web-2160p"}},
+			sonarrSet("2160p", false), radarrSet("remux-web-2160p", false)},
 		{Answers{Resolution: "1080p", Source: "bluray-web", Anime: true},
-			[]string{"web-1080p-v4", "anime-sonarr-v4"}, []string{"hd-bluray-web", "anime-radarr"}},
+			sonarrSet("1080p", true), radarrSet("hd-bluray-web", true)},
 	}
 	for _, tc := range cases {
 		out, err := RecyclarrConfig(tc.a, inst("http://sonarr:8989"), inst("http://radarr:7878"))

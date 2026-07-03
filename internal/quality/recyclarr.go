@@ -44,16 +44,26 @@ type Instance struct {
 	APIKey  string
 }
 
-// Template names verified against recyclarr/config-templates HEAD. These
-// strings are the contract with Recyclarr — change them only against the
-// live catalog (`recyclarr list templates`).
+// Include names verified against recyclarr/config-templates includes.json
+// at HEAD — these are what `include: - template:` resolves against (NOT the
+// starter-config filenames, which live in a different registry; learned by a
+// live sync failure). Each choice is the canonical TRaSH triad:
+// quality-definition + quality-profile + custom-formats.
 func sonarrTemplates(a Answers) []string {
-	t := []string{"web-1080p-v4"}
+	res := "1080p"
 	if a.Resolution == "2160p" {
-		t = []string{"web-2160p-v4"}
+		res = "2160p"
+	}
+	t := []string{
+		"sonarr-quality-definition-series",
+		"sonarr-v4-quality-profile-web-" + res,
+		"sonarr-v4-custom-formats-web-" + res,
 	}
 	if a.Anime {
-		t = append(t, "anime-sonarr-v4")
+		t = append(t,
+			"sonarr-v4-quality-profile-anime",
+			"sonarr-v4-custom-formats-anime",
+		)
 	}
 	return t
 }
@@ -70,9 +80,16 @@ func radarrTemplates(a Answers) []string {
 	default:
 		main = "hd-bluray-web"
 	}
-	t := []string{main}
+	t := []string{
+		"radarr-quality-definition-movie",
+		"radarr-quality-profile-" + main,
+		"radarr-custom-formats-" + main,
+	}
 	if a.Anime {
-		t = append(t, "anime-radarr")
+		t = append(t,
+			"radarr-quality-profile-anime",
+			"radarr-custom-formats-anime",
+		)
 	}
 	return t
 }
