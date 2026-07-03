@@ -30,6 +30,10 @@ type HomepageInput struct {
 	Key      string // API key (empty for keyless apps)
 	Username string // qBittorrent
 	Password string // qBittorrent
+	// WidgetPort overrides the container port for the widget URL (0 = the
+	// registry default). Needed for apps whose container port follows a
+	// host remap (qBittorrent's WEBUI_PORT).
+	WidgetPort int
 }
 
 // BuildHomepageServices turns selected apps into dashboard tiles. Homepage
@@ -52,11 +56,15 @@ func BuildHomepageServices(inputs []HomepageInput) []HomepageService {
 			Href:  in.HostURL,
 		}
 		if known && meta.widget != "" {
+			port := in.App.Web.Container
+			if in.WidgetPort != 0 {
+				port = in.WidgetPort
+			}
 			w := &HomepageWidget{
 				Type: meta.widget,
 				// Container-to-container URL; Homepage reaches the app on the
 				// bridge by name at its container port.
-				URL: fmt.Sprintf("http://%s:%d", in.App.ID, in.App.Web.Container),
+				URL: fmt.Sprintf("http://%s:%d", in.App.ID, port),
 			}
 			// qBittorrent authenticates with username+password; everyone
 			// else with an API key.
