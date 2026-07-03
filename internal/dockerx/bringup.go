@@ -43,6 +43,16 @@ func (d *Docker) Up(artifactsDir string, services ...string) error {
 	return nil
 }
 
+// Down stops and removes the stack's containers and network. Bind-mounted
+// data (appdata, media) is untouched by construction — compose down never
+// deletes host paths.
+func (d *Docker) Down(artifactsDir string) error {
+	if _, err := d.runIn(artifactsDir, "compose", "down", "--remove-orphans"); err != nil {
+		return fmt.Errorf("stopping the stack: %w", err)
+	}
+	return nil
+}
+
 // Pull refreshes every image the generated compose references. Output is
 // compose's own progress; the caller follows with Up so new images are
 // actually running (arrsenal update, DESIGN.md §13 v0.3).
