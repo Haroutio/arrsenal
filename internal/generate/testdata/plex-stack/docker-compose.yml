@@ -68,3 +68,4 @@ services:
 networks:
   arrsenal:
     driver: bridge
+    name: arrsenal

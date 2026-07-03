@@ -10,6 +10,7 @@ import (
 var outcomeSymbol = map[Outcome]string{
 	OutcomeWired:   "✓",
 	OutcomeExisted: "●",
+	OutcomeSynced:  "↻",
 	OutcomeManual:  "⚠",
 	OutcomeFailed:  "✗",
 }
@@ -54,7 +55,7 @@ func RenderReport(results []Result) string {
 	}
 
 	var parts []string
-	for _, o := range []Outcome{OutcomeWired, OutcomeExisted, OutcomeManual, OutcomeFailed} {
+	for _, o := range []Outcome{OutcomeWired, OutcomeExisted, OutcomeSynced, OutcomeManual, OutcomeFailed} {
 		if counts[o] > 0 {
 			parts = append(parts, fmt.Sprintf("%d %s", counts[o], o))
 		}

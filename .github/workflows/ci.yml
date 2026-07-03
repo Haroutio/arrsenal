@@ -54,7 +54,7 @@ jobs:
       # bursts; pre-pull with backoff so the product run never eats the flake.
       - name: pre-pull images with retry
         run: |
-          for image in lscr.io/linuxserver/prowlarr:latest lscr.io/linuxserver/sonarr:latest lscr.io/linuxserver/sabnzbd:latest; do
+          for image in lscr.io/linuxserver/prowlarr:latest lscr.io/linuxserver/sonarr:latest lscr.io/linuxserver/sabnzbd:latest ghcr.io/recyclarr/recyclarr:8; do
             for attempt in 1 2 3 4; do
               docker pull --quiet "$image" && break
               echo "pull $image failed (attempt $attempt), backing off…"
@@ -73,6 +73,7 @@ jobs:
         run: |
           ./arrsenal --yes --apps prowlarr,sonarr,sabnzbd --gpu none \
             --admin-user ci --admin-pass ci-wiring-pass \
+            --trash --trash-resolution 1080p \
             --data-root /tmp/arrtest/data --appdata-root /tmp/arrtest/appdata \
             --state /tmp/arrtest/arrsenal.yaml --artifacts-dir /tmp/arrtest \
             --puid "$(id -u)" --pgid "$(id -g)" | tee /tmp/first-run.log
@@ -106,6 +107,20 @@ jobs:
           echo "sab folders on the data tree:"
           grep -E '^(download_dir|complete_dir)' /tmp/arrtest/appdata/sabnzbd/sabnzbd.ini | tee /dev/stderr
           grep -qE '^complete_dir = /data/usenet/complete' /tmp/arrtest/appdata/sabnzbd/sabnzbd.ini
+          assert_json http://localhost:8989/api/v3/qualityprofile "X-Api-Key: $SONK" \
+            '.[] | select(.name=="WEB-1080p")' "TRaSH WEB-1080p quality profile synced into sonarr"
+      # Recyclarr is our one integration whose data source lives outside this
+      # repo (the TRaSH guides); when it breaks, the report tail is rarely
+      # enough — surface its own debug log.
+      - name: debug — recyclarr autopsy on failure
+        if: failure()
+        run: |
+          echo "=== generated config (keys redacted) ==="
+          sed -E 's/api_key:.*/api_key: REDACTED/' /tmp/arrtest/appdata/recyclarr/recyclarr.yml || true
+          echo "=== recyclarr version ==="
+          docker run --rm ghcr.io/recyclarr/recyclarr:8 --version || true
+          echo "=== debug log from the failing product-run sync ==="
+          sed -E 's/[Aa]pi[_-]?[Kk]ey[^,}]*/api_key REDACTED/g' /tmp/arrtest/appdata/recyclarr/logs/cli/*.debug.log || true
       - name: re-run is idempotent — everything comes back existed, nothing re-wired
         run: |
           ./arrsenal --yes --gpu none --admin-user ci --admin-pass ci-wiring-pass \

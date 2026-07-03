@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -17,6 +18,7 @@ import (
 	"github.com/Haroutio/arrsenal/internal/dockerx"
 	"github.com/Haroutio/arrsenal/internal/generate"
 	"github.com/Haroutio/arrsenal/internal/preflight"
+	"github.com/Haroutio/arrsenal/internal/quality"
 	"github.com/Haroutio/arrsenal/internal/registry"
 	"github.com/Haroutio/arrsenal/internal/state"
 	"github.com/Haroutio/arrsenal/internal/tui"
@@ -535,14 +537,37 @@ func buildSpec(s *state.State, o options, adopted map[string]bool) wire.Spec {
 	if s.VPNEnabled() {
 		qbitHost = "gluetun"
 	}
+	var trash *quality.Answers
+	var runRecyclarr func() (string, error)
+	recyclarrDir := filepath.Join(s.AppdataRoot, "recyclarr")
+	if s.TRaSH.Enabled {
+		trash = &quality.Answers{Resolution: s.TRaSH.Resolution, Source: s.TRaSH.Source, Anime: s.TRaSH.Anime}
+		puid, pgid := s.PUID, s.PGID
+		runRecyclarr = func() (string, error) {
+			// Recyclarr's image runs unprivileged; hand it the config dir.
+			chownTree(recyclarrDir, puid, pgid)
+			// Pinned to the major: the generated config speaks the v8
+			// schema, so a future v9 must be a deliberate upgrade here —
+			// not a surprise breakage (v8 itself broke v7's includes).
+			return dockerx.New().RunOneShot(
+				"ghcr.io/recyclarr/recyclarr:8",
+				generate.NetworkName,
+				fmt.Sprintf("%d:%d", puid, pgid),
+				[]string{recyclarrDir + ":/config"},
+				"sync",
+			)
+		}
+	}
+
 	return wire.Spec{
 		Apps:        apps,
 		Adopted:     adopted,
 		AppdataRoot: s.AppdataRoot,
-		AdminUser:   o.adminUser,
-		AdminPass:   o.adminPass,
-		QBitPass:    s.Secrets.QBittorrentPassword,
-		HWAccel:     hwAccelFor(s.GPU),
+		TRaSH:       trash, RecyclarrDir: recyclarrDir, RunRecyclarr: runRecyclarr,
+		AdminUser: o.adminUser,
+		AdminPass: o.adminPass,
+		QBitPass:  s.Secrets.QBittorrentPassword,
+		HWAccel:   hwAccelFor(s.GPU),
 		Access: func(id string) string {
 			app, ok := registry.ByID(id)
 			if !ok {
@@ -557,6 +582,20 @@ func buildSpec(s *state.State, o options, adopted map[string]bool) wire.Spec {
 		QBitContainerPort: qbitContainer,
 		QBitHost:          qbitHost,
 	}
+}
+
+// chownTree hands a directory tree to the container user (POSIX only; the
+// dev platform no-ops). Best effort — the sync surfaces any real problem.
+func chownTree(root string, uid, gid int) {
+	if runtime.GOOS == "windows" {
+		return
+	}
+	_ = filepath.Walk(root, func(path string, _ os.FileInfo, err error) error {
+		if err == nil {
+			_ = os.Chown(path, uid, gid)
+		}
+		return nil
+	})
 }
 
 func hwAccelFor(mode state.GPUMode) string {

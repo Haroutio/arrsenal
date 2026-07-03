@@ -87,6 +87,10 @@ type deviceReservation struct {
 
 type network struct {
 	Driver string `yaml:"driver"`
+	// Name pins the Docker-level network name — without it compose prefixes
+	// the project name (arrsenal_arrsenal), which breaks every
+	// `docker run --network arrsenal` one-shot (Recyclarr, issue #75).
+	Name string `yaml:"name"`
 }
 
 // Render produces the artifacts for a state. The state carries everything;
@@ -112,7 +116,7 @@ func Render(s *state.State, statePath string) (Artifacts, error) {
 	cf := composeFile{
 		Name:     "arrsenal",
 		Services: services,
-		Networks: map[string]network{NetworkName: {Driver: "bridge"}},
+		Networks: map[string]network{NetworkName: {Driver: "bridge", Name: NetworkName}},
 	}
 	body, err := yaml.Marshal(cf)
 	if err != nil {

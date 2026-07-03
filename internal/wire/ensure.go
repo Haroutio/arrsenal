@@ -15,8 +15,11 @@ type Outcome string
 const (
 	OutcomeWired   Outcome = "wired"
 	OutcomeExisted Outcome = "existed"
-	OutcomeManual  Outcome = "manual"
-	OutcomeFailed  Outcome = "failed"
+	// OutcomeSynced marks a CONVERGENT step (Recyclarr): it runs every pass
+	// by design, so it is neither "newly wired" nor "left untouched".
+	OutcomeSynced Outcome = "synced"
+	OutcomeManual Outcome = "manual"
+	OutcomeFailed Outcome = "failed"
 )
 
 // Result is one line of the final report.
