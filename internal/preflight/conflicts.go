@@ -30,9 +30,12 @@ const (
 type Conflict struct {
 	App      string
 	Kind     ConflictKind
-	Port     int    // set for KindPort
+	Port     int    // set for KindPort: the busy HOST port
 	Protocol string // set for KindPort
-	Detail   string
+	// ContainerPort is the registry-side key for a remap (state.PortRemaps
+	// is keyed by container port — see state.WebPorts for why).
+	ContainerPort int
+	Detail        string
 }
 
 // Blocking reports whether the finding must be resolved before bring-up.
@@ -101,6 +104,7 @@ func ScanConflicts(s *state.State, deps ScanDeps) ([]Conflict, error) {
 			for _, p := range ports {
 				if !deps.PortFree(p.Host, p.Protocol) {
 					out = append(out, Conflict{App: id, Kind: KindPort, Port: p.Host, Protocol: p.Protocol,
+						ContainerPort: p.Container,
 						Detail: fmt.Sprintf("host port %d/%s (%s) is already in use — pick another port for %s",
 							p.Host, p.Protocol, p.Purpose, app.Name)})
 				}
