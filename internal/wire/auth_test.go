@@ -84,19 +84,38 @@ func TestEnsureAuthLeavesConfiguredAppsAlone(t *testing.T) {
 	}
 }
 
-func TestEnsureAuthNeverTouchesAdoptedConfigs(t *testing.T) {
-	// The field case: an adopted config with method "none" is a CHOICE
-	// (LAN-only behind a tunnel), not an unfinished wizard.
+func TestEnsureAuthCompletesNeverConfiguredAdoptedApps(t *testing.T) {
+	// The field case, round two: method "none" is NOT a choice — the modern
+	// arrs don't offer it in the UI; it means the first-run auth screen was
+	// never completed and the app nags forever. The original adoption rule
+	// preserved that nag on the user's real box; completing it clobbers
+	// nothing.
 	f := newFakeArr("none")
 	srv := f.server(t)
 	defer srv.Close()
 
 	r := EnsureAuth(context.Background(), authClient(srv.URL), "Sonarr", "/api/v3", "harout", adminPass, true)
-	if r.Outcome != OutcomeExisted || f.puts.Load() != 0 {
-		t.Fatalf("adopted none-auth must be preserved: %+v puts=%d", r, f.puts.Load())
+	if r.Outcome != OutcomeWired || f.puts.Load() != 1 {
+		t.Fatalf("adopted never-configured auth must be completed: %+v puts=%d", r, f.puts.Load())
+	}
+	if f.lastPut["authenticationMethod"] != "forms" || f.lastPut["username"] != "harout" {
+		t.Fatalf("auth fields wrong: %+v", f.lastPut)
 	}
 	if !strings.Contains(r.Detail, "adopted") {
-		t.Fatalf("detail should say why it was skipped: %+v", r)
+		t.Fatalf("detail must say this was an adopted-but-unconfigured completion: %+v", r)
+	}
+}
+
+func TestEnsureAuthNeverTouchesConfiguredAdoptedApps(t *testing.T) {
+	// Auth an adopted app HAS is the user's configuration — zero writes,
+	// whatever the method (basic here, deliberately not our forms).
+	f := newFakeArr("basic")
+	srv := f.server(t)
+	defer srv.Close()
+
+	r := EnsureAuth(context.Background(), authClient(srv.URL), "Sonarr", "/api/v3", "harout", adminPass, true)
+	if r.Outcome != OutcomeExisted || f.puts.Load() != 0 {
+		t.Fatalf("adopted configured auth must see zero writes: %+v puts=%d", r, f.puts.Load())
 	}
 }
 

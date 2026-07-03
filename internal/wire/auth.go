@@ -11,9 +11,12 @@ import (
 // the arguments of this call and nowhere else.
 //
 // adopted marks apps whose appdata predates this run (preflight's adoption
-// notice). Their auth state — including a deliberate "none" — is the user's
-// configuration and is never modified; only method "none" on an app
-// Arrsenal itself created counts as "not yet set up".
+// notice). Any auth an adopted app HAS is the user's configuration and is
+// never modified. Method "none", though, is not a configuration — the
+// modern arrs don't even offer it in the UI; it means the first-run auth
+// screen was never completed (the app nags until it is). Completing it with
+// the provided credential clobbers nothing, so adoption does not block it —
+// a field report proved the old behavior just preserved the nag forever.
 //
 // apiBase is the arr-family prefix: "/api/v3" for the PVRs, "/api/v1" for
 // Prowlarr — same host-config resource, different mount point.
@@ -34,9 +37,9 @@ func EnsureAuth(ctx context.Context, c *Client, appName, apiBase, username, pass
 	if method != "" && method != "none" {
 		return Result{Connection: conn, Outcome: OutcomeExisted} // already authed
 	}
+	detail := ""
 	if adopted {
-		return Result{Connection: conn, Outcome: OutcomeExisted,
-			Detail: "authentication left exactly as the adopted config had it"}
+		detail = "auth was never set up in the adopted config — completed it with your admin credential"
 	}
 
 	host["authenticationMethod"] = "forms"
@@ -53,5 +56,5 @@ func EnsureAuth(ctx context.Context, c *Client, appName, apiBase, username, pass
 		return Result{Connection: conn, Outcome: OutcomeFailed,
 			Detail: fmt.Sprintf("applying auth settings: %v", err)}
 	}
-	return Result{Connection: conn, Outcome: OutcomeWired}
+	return Result{Connection: conn, Outcome: OutcomeWired, Detail: detail}
 }
