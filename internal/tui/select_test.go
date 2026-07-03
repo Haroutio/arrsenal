@@ -124,3 +124,60 @@ func TestSelectCursorStaysInBounds(t *testing.T) {
 		t.Fatalf("cursor escaped the bottom: %d", m.cursor)
 	}
 }
+
+func pressKey(m SelectModel, key string) SelectModel {
+	var msg tea.Msg
+	switch key {
+	case "down":
+		msg = tea.KeyMsg{Type: tea.KeyDown}
+	case "up":
+		msg = tea.KeyMsg{Type: tea.KeyUp}
+	default:
+		msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(key)}
+	}
+	next, _ := m.Update(msg)
+	return next.(SelectModel)
+}
+
+// The menu is taller than a stock 24-row terminal, and Bubble Tea clips an
+// overflowing view from the TOP — which ate the first rows (Jellyfin,
+// field-reported from a real install). The window must follow the cursor.
+func TestSmallTerminalWindowsAroundCursor(t *testing.T) {
+	m := NewSelect(nil)
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 15})
+	m = next.(SelectModel)
+
+	top := m.View()
+	if !strings.Contains(top, "Jellyfin") {
+		t.Fatalf("cursor is on the first row — Jellyfin must be visible:\n%s", top)
+	}
+	if !strings.Contains(top, "more below") {
+		t.Fatalf("overflow below must be announced:\n%s", top)
+	}
+	if strings.Contains(top, "Homepage") {
+		t.Fatalf("a 15-line window cannot honestly show the whole menu:\n%s", top)
+	}
+
+	for i := 0; i < len(m.rows); i++ {
+		m = pressKey(m, "down")
+	}
+	bottom := m.View()
+	if !strings.Contains(bottom, "Homepage") {
+		t.Fatalf("cursor is on the last row — Homepage must be visible:\n%s", bottom)
+	}
+	if !strings.Contains(bottom, "more above") {
+		t.Fatalf("overflow above must be announced:\n%s", bottom)
+	}
+}
+
+// Without a reported terminal size every row renders — also the guarantee
+// that no app can be silently absent from the menu.
+func TestUnknownTerminalSizeRendersEverything(t *testing.T) {
+	m := NewSelect(nil)
+	view := m.View()
+	for _, app := range registry.All() {
+		if !strings.Contains(view, app.Name) {
+			t.Fatalf("%s missing from the un-windowed menu", app.Name)
+		}
+	}
+}

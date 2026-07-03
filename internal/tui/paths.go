@@ -123,7 +123,7 @@ func (m PathsModel) osDiskWarning(dataRoot string) string {
 // View implements the render.
 func (m PathsModel) View() string {
 	var b strings.Builder
-	b.WriteString(styleTitle.Render("Storage") + "\n")
+	b.WriteString(header("Storage"))
 	b.WriteString(styleDim.Render("One data root keeps imports as instant hardlinks; appdata is the backup surface.") + "\n\n")
 	fmt.Fprintf(&b, "  %-15s %s\n", "Media root", m.inputs[0].View())
 	fmt.Fprintf(&b, "  %-15s %s\n", "Appdata root", m.inputs[1].View())
@@ -134,7 +134,7 @@ func (m PathsModel) View() string {
 	}
 
 	if len(m.mounts) > 0 {
-		b.WriteString("\n" + styleGroup.Render("Detected storage") + "\n")
+		b.WriteString("\n" + groupRule("Detected storage") + "\n")
 		for _, mt := range m.mounts {
 			line := fmt.Sprintf("  %-24s %-10s %s free", mt.Target, mt.FSType, preflight.HumanBytes(mt.FreeBytes))
 			if mt.IsOSDisk() {
@@ -150,6 +150,6 @@ func (m PathsModel) View() string {
 	if m.osWarn != "" {
 		b.WriteString("\n" + styleWarn.Render("⚠ "+m.osWarn) + "\n")
 	}
-	b.WriteString(styleHelp.Render("tab switch field · enter continue · esc quit"))
+	b.WriteString(helpBar("tab", "switch field", "enter", "continue", "esc", "quit"))
 	return b.String()
 }

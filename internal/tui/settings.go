@@ -126,7 +126,7 @@ func (m *SettingsModel) refocus() {
 // View implements tea.Model.
 func (m SettingsModel) View() string {
 	var b strings.Builder
-	b.WriteString(styleTitle.Render("Identity & environment") + "\n")
+	b.WriteString(header("Identity & environment"))
 	b.WriteString(styleDim.Render("The containers run as this user; media files will belong to it.") + "\n\n")
 	for i, in := range m.inputs {
 		fmt.Fprintf(&b, "  %-9s %s\n", m.labels[i], in.View())
@@ -134,6 +134,6 @@ func (m SettingsModel) View() string {
 	if m.err != "" {
 		b.WriteString("\n" + styleWarn.Render("✗ "+m.err) + "\n")
 	}
-	b.WriteString(styleHelp.Render("tab next field · enter continue · esc quit"))
+	b.WriteString(helpBar("tab", "next field", "enter", "continue", "esc", "quit"))
 	return b.String()
 }
