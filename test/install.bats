@@ -73,6 +73,16 @@ tier_for() { # id version_id → tier
   [ "$status" -ne 0 ]
 }
 
+@test "ask: headless (no tty) dies with instructions instead of assuming the default" {
+  src="source '$BATS_TEST_DIRNAME/../install.sh'"
+  # setsid detaches the controlling terminal so /dev/tty is unopenable — the
+  # honest reproduction of a piped install in CI or cron. Without the guard,
+  # a default-yes prompt would proceed with nobody consenting.
+  run setsid bash -c "ARRSENAL_SOURCED=1 $src; ask 'install?' y"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"ARRSENAL_YES=1"* ]]
+}
+
 @test "sourcing guard: main never runs when sourced" {
   run env ARRSENAL_SOURCED=1 bash -c "source '$BATS_TEST_DIRNAME/../install.sh'; echo sourced-ok"
   [ "$status" -eq 0 ]

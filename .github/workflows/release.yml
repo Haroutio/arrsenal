@@ -8,7 +8,17 @@ permissions:
   contents: write
 
 jobs:
+  # The tag gate (issue #32): the full integration suite runs against the
+  # tagged commit before anything is built or published. A tag on a commit
+  # that cannot install, wire, and cleanly uninstall a real stack fails here
+  # and no release appears.
+  integration:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/integration.yml
+
   goreleaser:
+    needs: integration
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5

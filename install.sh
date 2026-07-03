@@ -27,14 +27,18 @@ warn() { printf '\033[1;33marrsenal!\033[0m %s\n' "$*" >&2; }
 die()  { printf '\033[1;31marrsenal✗\033[0m %s\n' "$*" >&2; exit 1; }
 
 # ask "question" default(y|n) → 0 yes / 1 no. Reads /dev/tty because stdin
-# is the script itself under curl|bash.
+# is the script itself under curl|bash. With no terminal to ask on, it DIES
+# rather than assume: a headless pipe must never trigger a default-yes
+# install ("nothing installs silently" is the whole promise).
 ask() {
   local q="$1" def="${2:-n}" reply
   if [ -n "$ARRSENAL_YES" ]; then
     [ "$def" = "y" ] && return 0 || return 1
   fi
   if [ "$def" = "y" ]; then q="$q [Y/n] "; else q="$q [y/N] "; fi
-  read -r -p "$q" reply < /dev/tty || reply=""
+  if ! read -r -p "$q" reply < /dev/tty; then
+    die "no terminal to ask on — re-run interactively, or set ARRSENAL_YES=1 to accept the default-yes steps."
+  fi
   reply="${reply:-$def}"
   case "$reply" in [Yy]*) return 0 ;; *) return 1 ;; esac
 }
@@ -159,10 +163,14 @@ main() {
     docker_ready || die "Docker still is not usable after installation — check 'docker compose version'."
   fi
 
-  local tag tmp
+  local tag
   tag=$(resolve_version)
+  # tmp is deliberately NOT local: the EXIT trap can fire after main returns
+  # (ARRSENAL_NO_EXEC skips the exec), where a local would be unbound under
+  # set -u. On the exec path the trap never fires at all — so also clean up
+  # explicitly before handing over, instead of leaking a /tmp dir per install.
   tmp=$(mktemp -d)
-  trap 'rm -rf "$tmp"' EXIT
+  trap 'rm -rf "${tmp:-}"' EXIT
 
   download_and_verify "$tag" "$arch" "$tmp"
 
@@ -171,6 +179,14 @@ main() {
 
   say "Done. Starting arrsenal — re-run it any time with: sudo arrsenal"
   if [ -z "${ARRSENAL_NO_EXEC:-}" ]; then
+    rm -rf "$tmp"
+    trap - EXIT
+    # Under curl|bash our stdin IS the pipe, and the TUI would inherit it
+    # and correctly refuse ("no terminal attached") despite the user sitting
+    # at one. Hand it the real terminal when there is one.
+    if { : < /dev/tty; } 2>/dev/null; then
+      exec sudo "$INSTALL_DIR/arrsenal" < /dev/tty
+    fi
     exec sudo "$INSTALL_DIR/arrsenal"
   fi
 }

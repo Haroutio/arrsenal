@@ -1,0 +1,10 @@
+# As written by arrsenal v0.1.x — the initial schema.
+version: 1
+apps: [jellyfin, sonarr, prowlarr, sabnzbd]
+puid: 1000
+pgid: 1000
+tz: America/Los_Angeles
+umask: "002"
+data_root: /data
+appdata_root: /opt/appdata
+gpu: nvidia

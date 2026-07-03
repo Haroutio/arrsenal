@@ -353,41 +353,78 @@ func TestSplitStorageSemantics(t *testing.T) {
 	}
 }
 
-func TestV1StateFilesStillLoad(t *testing.T) {
-	// A file written by a v0.1/v0.2 binary (schema v1) loads under v2:
-	// downgrades are gated, upgrades are seamless.
-	p := filepath.Join(t.TempDir(), "arrsenal.yaml")
-	v1 := `version: 1
-apps: [sonarr]
-puid: 1000
-pgid: 1000
-tz: Etc/UTC
-umask: "002"
-data_root: /data
-appdata_root: /opt/appdata
-gpu: none
-`
-	if err := os.WriteFile(p, []byte(v1), 0o600); err != nil {
-		t.Fatal(err)
+// Every schema version ever released has a fixture in testdata, and every
+// one of them must load, validate, and upgrade in every future build — this
+// test IS the migration policy (issue #32, documented in DESIGN.md §1).
+// Deleting or breaking a fixture is a compatibility break, not a cleanup.
+func TestEveryHistoricalSchemaVersionLoads(t *testing.T) {
+	fixtures, err := filepath.Glob(filepath.Join("testdata", "v*.yaml"))
+	if err != nil || len(fixtures) != CurrentVersion {
+		t.Fatalf("want one fixture per schema version 1..%d, found %v (%v)",
+			CurrentVersion, fixtures, err)
 	}
-	s, err := Load(p)
-	if err != nil {
-		t.Fatalf("v1 file must load under CurrentVersion=%d: %v", CurrentVersion, err)
+	for _, fixture := range fixtures {
+		raw, err := os.ReadFile(fixture)
+		if err != nil {
+			t.Fatal(err)
+		}
+		p := filepath.Join(t.TempDir(), "arrsenal.yaml")
+		if err := os.WriteFile(p, raw, 0o600); err != nil {
+			t.Fatal(err)
+		}
+
+		s, err := Load(p)
+		if err != nil {
+			t.Fatalf("%s must load under CurrentVersion=%d: %v", fixture, CurrentVersion, err)
+		}
+		// Saving upgrades the stamp so old binaries refuse (never silently
+		// drop newer fields), and the result must round-trip.
+		if err := s.Save(p); err != nil {
+			t.Fatalf("%s: upgraded save: %v", fixture, err)
+		}
+		upgraded, err := Load(p)
+		if err != nil {
+			t.Fatalf("%s: reload after upgrade: %v", fixture, err)
+		}
+		if upgraded.Version != CurrentVersion {
+			t.Fatalf("%s: saved version = %d, want %d", fixture, upgraded.Version, CurrentVersion)
+		}
 	}
-	if s.SplitStorage() {
+}
+
+// Era-specific semantics that the generic loop above cannot see.
+func TestHistoricalSchemaSemantics(t *testing.T) {
+	load := func(name string) *State {
+		t.Helper()
+		p := filepath.Join(t.TempDir(), "arrsenal.yaml")
+		raw, err := os.ReadFile(filepath.Join("testdata", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, raw, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		s, err := Load(p)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		return s
+	}
+
+	if load("v1.yaml").SplitStorage() {
 		t.Fatal("v1 files are single-root by definition")
 	}
-	// Saving upgrades the stamp so old binaries refuse (never silently drop
-	// newer fields).
-	if err := s.Save(p); err != nil {
-		t.Fatal(err)
+	v2 := load("v2.yaml")
+	if !v2.SplitStorage() || v2.EffectiveDownloadsRoot() != "/mnt/scratch/downloads" {
+		t.Fatalf("v2 split storage lost in migration: %+v", v2)
 	}
-	upgraded, err := Load(p)
-	if err != nil {
-		t.Fatal(err)
+	v3 := load("v3.yaml")
+	if !v3.VPNEnabled() || v3.Secrets.WireguardPrivateKey == "" {
+		t.Fatalf("v3 vpn config lost in migration: %+v", v3)
 	}
-	if upgraded.Version != CurrentVersion {
-		t.Fatalf("saved version = %d, want %d", upgraded.Version, CurrentVersion)
+	v4 := load("v4.yaml")
+	if !v4.TRaSH.Enabled || v4.TRaSH.Resolution != "1080p" || !v4.TRaSH.Anime {
+		t.Fatalf("v4 trash answers lost in migration: %+v", v4)
 	}
 }
 

@@ -1,0 +1,16 @@
+# As written by v0.4.0 — adds trash (TRaSH-guide quality answers).
+version: 4
+apps: [jellyfin, sonarr, radarr, prowlarr, sabnzbd]
+puid: 1000
+pgid: 1000
+tz: Etc/UTC
+umask: "002"
+data_root: /data
+appdata_root: /opt/appdata
+gpu: amd
+jellyfin_host_network: true
+trash:
+  enabled: true
+  resolution: 1080p
+  source: bluray-web
+  anime: true
