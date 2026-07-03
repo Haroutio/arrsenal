@@ -16,10 +16,6 @@ issue, and the design has a written contract.
 
 ## Development setup
 
-> **Current status:** the initial Go scaffold lands with the first v0.1 milestone issue —
-> until it does, there is nothing to build, and contributing means design discussion in
-> the issues.
-
 - Go 1.24+ (the binary targets Linux; development works anywhere Go does)
 - Docker + compose plugin, for integration tests
 - `golangci-lint` for linting

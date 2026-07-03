@@ -14,11 +14,10 @@ hardware transcoding enabled — before you've opened a single web UI.
 Most stack installers stop at "containers running." Finishing the configuration is the
 whole point of this one.
 
-> **Status: pre-release — nothing has shipped yet.** This README describes the product
-> as designed. It lands in two steps: **v0.1** covers install through `docker compose up`
-> (TUI, preflight, generation — no wiring yet); the auto-wiring described above is the
-> **v0.2** milestone. Follow the [milestones](../../milestones) to watch both land.
-> Until a release exists, there is nothing to install.
+> **Status: early.** **v0.1 is out** and covers install through `docker compose up` —
+> the TUI, preflight, generation, and bring-up. The auto-wiring described above is the
+> **v0.2** milestone, in progress now; until it lands you connect the apps to each other
+> the classic way. Follow the [milestones](../../milestones) to watch it arrive.
 
 ## What you get
 
@@ -41,10 +40,10 @@ Plex and Emby arrive in v0.3 — Plex paired with Overseerr, Emby with Jellyseer
 including honest warnings that their hardware transcoding sits behind Plex Pass /
 Emby Premiere. Jellyfin's does not; that's why it's the flagship path.
 
-## How it will work
+## Install
 
 ```bash
-# Planned v0.1 interface — release-pinned, checksum-verified:
+# Release-pinned, checksum-verified:
 curl -fsSL https://raw.githubusercontent.com/Haroutio/arrsenal/v0.1.0/install.sh | bash
 ```
 
@@ -55,11 +54,14 @@ your architecture, verifies its SHA-256 checksum, and hands over to the TUI.
 Prefer to read before you run? Good instinct:
 
 ```bash
-# Planned interface — no release exists yet:
 curl -fsSL https://raw.githubusercontent.com/Haroutio/arrsenal/v0.1.0/install.sh -o install.sh
 less install.sh
 bash install.sh
 ```
+
+Re-run `sudo arrsenal` any time to add or remove apps — your answers persist in
+`/opt/arrsenal/arrsenal.yaml`, and Compose reconciles the difference. Headless use:
+`arrsenal --yes --apps sonarr,radarr,... ` (see `arrsenal --help`).
 
 ## Design principles
 
