@@ -163,10 +163,14 @@ main() {
     docker_ready || die "Docker still is not usable after installation — check 'docker compose version'."
   fi
 
-  local tag tmp
+  local tag
   tag=$(resolve_version)
+  # tmp is deliberately NOT local: the EXIT trap can fire after main returns
+  # (ARRSENAL_NO_EXEC skips the exec), where a local would be unbound under
+  # set -u. On the exec path the trap never fires at all — so also clean up
+  # explicitly before handing over, instead of leaking a /tmp dir per install.
   tmp=$(mktemp -d)
-  trap 'rm -rf "$tmp"' EXIT
+  trap 'rm -rf "${tmp:-}"' EXIT
 
   download_and_verify "$tag" "$arch" "$tmp"
 
@@ -175,6 +179,8 @@ main() {
 
   say "Done. Starting arrsenal — re-run it any time with: sudo arrsenal"
   if [ -z "${ARRSENAL_NO_EXEC:-}" ]; then
+    rm -rf "$tmp"
+    trap - EXIT
     exec sudo "$INSTALL_DIR/arrsenal"
   fi
 }
