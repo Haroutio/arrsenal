@@ -153,6 +153,14 @@ func EnsureSeerr(ctx context.Context, t SeerrTarget) []Result {
 			"syncEnabled":       true,
 			"preventSearch":     false,
 		}
+		// Per-service required fields — Seerr's OpenAPI validation rejects
+		// the body without them (found live, not in any fake).
+		switch arr.Name {
+		case "Sonarr":
+			payload["enableSeasonFolders"] = true
+		case "Radarr":
+			payload["minimumAvailability"] = "released"
+		}
 		c.WithRedaction(arr.APIKey)
 		path := "/api/v1/settings/" + strings.ToLower(arr.Name)
 		if err := c.PostJSON(ctx, path, payload, nil); err != nil {
