@@ -1,0 +1,45 @@
+name: Bug report
+description: Something Arrsenal did wrong, or failed to do
+labels: ["type:bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. The three fields below let us reproduce most issues
+        without a round-trip — please fill them honestly.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What did Arrsenal do, and what did you expect instead?
+      placeholder: Preflight said the hardlink test passed, but Sonarr imports are copying...
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Distro + version, arch, Docker version, and whether Docker was preinstalled (Tier 2) or installed by Arrsenal (Tier 1).
+      placeholder: |
+        Ubuntu 24.04, amd64
+        Docker 27.x (installed by Arrsenal)
+        arrsenal v0.1.0
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Relevant output
+      description: |
+        Paste the relevant terminal output. Arrsenal never prints secrets, but double-check
+        anything you paste from app configs or `docker logs` yourself.
+      render: text
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Preflight
+      options:
+        - label: I checked existing issues for a duplicate
+          required: true
+        - label: This is about Arrsenal itself, not about how to configure Sonarr/Radarr/etc. generally
+          required: true

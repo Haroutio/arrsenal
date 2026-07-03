@@ -1,0 +1,29 @@
+name: Feature request
+description: Propose an addition or change
+labels: ["type:feature"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before proposing: skim [docs/DESIGN.md](https://github.com/Haroutio/arrsenal/blob/main/docs/DESIGN.md) — some
+        lines (adoption of unmanaged installs, kernel driver installation, secret vaults)
+        are deliberate refusals with reasoning, not gaps.
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What can't you do today, or what's harder than it should be?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What should Arrsenal do? If it's a new app, note which registry role it fits.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Including "do it manually in docker-compose.override.yml" — why isn't that enough?
