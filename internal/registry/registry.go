@@ -138,6 +138,11 @@ type App struct {
 	BootPhase  BootPhase
 	GPU        bool     // can take the transcode device (DESIGN.md §8)
 	Warnings   []string // shown in the TUI at selection time, before commitment
+	// APIBase is the arr-family API prefix for the wiring engine. NOT
+	// uniform across the family: Sonarr and Radarr speak /api/v3, Lidarr
+	// and Prowlarr /api/v1 — assuming v3 everywhere handed Lidarr three
+	// 404s in a field report. Empty for apps the arr lanes don't wire.
+	APIBase string
 }
 
 // ImageRef is the full pullable reference including tag.

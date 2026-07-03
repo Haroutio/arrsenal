@@ -9,6 +9,7 @@ import (
 // DownloadClientTarget is one download client as an arr should see it.
 type DownloadClientTarget struct {
 	ArrName        string // for the report label
+	APIBase        string // the arr's API prefix (registry.App.APIBase): /api/v3 or /api/v1
 	ClientName     string // display + idempotency name, e.g. "SABnzbd"
 	Implementation string // "Sabnzbd" or "QBittorrent"
 	Host           string // container name (DESIGN.md §6)
@@ -20,7 +21,7 @@ type DownloadClientTarget struct {
 	Password string // qBittorrent (the pre-seeded WebUI password)
 }
 
-// downloadClient mirrors the arr /api/v3/downloadclient resource loosely.
+// downloadClient mirrors the arr downloadclient resource loosely.
 type downloadClient struct {
 	Name           string     `json:"name"`
 	Implementation string     `json:"implementation"`
@@ -45,14 +46,14 @@ func EnsureDownloadClient(ctx context.Context, arr *Client, t DownloadClientTarg
 	return EnsureByName(conn,
 		func() ([]downloadClient, error) {
 			var existing []downloadClient
-			err := arr.GetJSON(ctx, "/api/v3/downloadclient", &existing)
+			err := arr.GetJSON(ctx, t.APIBase+"/downloadclient", &existing)
 			return existing, err
 		},
 		func(d downloadClient) string { return d.Name },
 		t.ClientName,
 		func() error {
 			var schemas []downloadClient
-			if err := arr.GetJSON(ctx, "/api/v3/downloadclient/schema", &schemas); err != nil {
+			if err := arr.GetJSON(ctx, t.APIBase+"/downloadclient/schema", &schemas); err != nil {
 				return fmt.Errorf("reading download client schema: %w", err)
 			}
 			var tmpl *downloadClient
@@ -84,30 +85,57 @@ func EnsureDownloadClient(ctx context.Context, arr *Client, t DownloadClientTarg
 					tmpl.Fields[i].Value = t.Category
 				}
 			}
-			return arr.PostJSON(ctx, "/api/v3/downloadclient", tmpl, nil)
+			return arr.PostJSON(ctx, t.APIBase+"/downloadclient", tmpl, nil)
 		},
 	)
 }
 
-// rootFolder mirrors /api/v3/rootfolder.
+// rootFolder mirrors the arr rootfolder resource. The extra fields are
+// Lidarr's: its root folders carry defaults for new artists and its API
+// rejects a bare path (NotEmptyValidator on name, GreaterThanValidator on
+// the profile ids — learned from a live 400).
 type rootFolder struct {
-	Path string `json:"path"`
+	Path                     string `json:"path"`
+	Name                     string `json:"name,omitempty"`
+	DefaultQualityProfileID  int    `json:"defaultQualityProfileId,omitempty"`
+	DefaultMetadataProfileID int    `json:"defaultMetadataProfileId,omitempty"`
 }
 
 // EnsureRootFolder points an arr at its slice of the fixed media tree
-// (DESIGN.md §5.4): /data/media/<MediaDir>, idempotent by path.
-func EnsureRootFolder(ctx context.Context, arr *Client, arrName, path string) Result {
+// (DESIGN.md §5.4): /data/media/<MediaDir>, idempotent by path. apiBase is
+// the arr's prefix from the registry (/api/v3 or /api/v1 — not uniform).
+func EnsureRootFolder(ctx context.Context, arr *Client, apiBase, arrName, path string) Result {
 	conn := fmt.Sprintf("%s root folder %s", arrName, path)
 	return EnsureByName(conn,
 		func() ([]rootFolder, error) {
 			var existing []rootFolder
-			err := arr.GetJSON(ctx, "/api/v3/rootfolder", &existing)
+			err := arr.GetJSON(ctx, apiBase+"/rootfolder", &existing)
 			return existing, err
 		},
 		func(r rootFolder) string { return r.Path },
 		path,
 		func() error {
-			return arr.PostJSON(ctx, "/api/v3/rootfolder", rootFolder{Path: path}, nil)
+			payload := rootFolder{Path: path}
+			if apiBase == "/api/v1" {
+				// Lidarr: fill the required defaults from the app's own
+				// profile lists (a fresh install ships one of each).
+				var ids struct{ quality, metadata int }
+				var profiles []struct {
+					ID int `json:"id"`
+				}
+				if err := arr.GetJSON(ctx, apiBase+"/qualityprofile", &profiles); err != nil || len(profiles) == 0 {
+					return fmt.Errorf("reading quality profiles for root folder defaults: %w", err)
+				}
+				ids.quality = profiles[0].ID
+				if err := arr.GetJSON(ctx, apiBase+"/metadataprofile", &profiles); err != nil || len(profiles) == 0 {
+					return fmt.Errorf("reading metadata profiles for root folder defaults: %w", err)
+				}
+				ids.metadata = profiles[0].ID
+				payload.Name = arrName + " library"
+				payload.DefaultQualityProfileID = ids.quality
+				payload.DefaultMetadataProfileID = ids.metadata
+			}
+			return arr.PostJSON(ctx, apiBase+"/rootfolder", payload, nil)
 		},
 	)
 }

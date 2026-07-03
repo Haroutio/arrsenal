@@ -185,7 +185,7 @@ func interactiveFill(s *state.State, o *options) error {
 	// (those steps become manual report lines).
 	if o.adminPass == "" {
 		fmt.Printf("Admin username for the apps [%s]: ", o.adminUser)
-		if line, err := bufio.NewReader(os.Stdin).ReadString('\n'); err == nil {
+		if line, err := stdinReader.ReadString('\n'); err == nil {
 			if v := strings.TrimSpace(line); v != "" {
 				o.adminUser = v
 			}
@@ -204,7 +204,7 @@ func interactiveFill(s *state.State, o *options) error {
 		if entries, err := os.ReadDir(filepath.Join(s.AppdataRoot, "plex")); err != nil || len(entries) == 0 {
 			fmt.Println("Plex: get a claim token from https://www.plex.tv/claim (valid 4 minutes).")
 			fmt.Print("Claim token (enter to skip — you can claim later in the web UI): ")
-			if line, err := bufio.NewReader(os.Stdin).ReadString('\n'); err == nil {
+			if line, err := stdinReader.ReadString('\n'); err == nil {
 				o.plexClaim = strings.TrimSpace(line)
 			}
 		}
@@ -233,9 +233,8 @@ func interactiveFill(s *state.State, o *options) error {
 	// selected and nothing is configured yet; flags outrank the prompt.
 	if selectedID(s, "qbittorrent") && !s.VPNEnabled() && o.vpnProvider == "" {
 		if confirm("Route qBittorrent through a VPN (gluetun, WireGuard)?", false) {
-			reader := bufio.NewReader(os.Stdin)
 			fmt.Print("VPN provider (gluetun name, e.g. mullvad, protonvpn): ")
-			if line, err := reader.ReadString('\n'); err == nil {
+			if line, err := stdinReader.ReadString('\n'); err == nil {
 				s.VPN.Provider = strings.TrimSpace(line)
 			}
 			fmt.Print("WireGuard private key: ")
@@ -244,7 +243,7 @@ func interactiveFill(s *state.State, o *options) error {
 			}
 			fmt.Println()
 			fmt.Print("Server countries (optional, comma-separated): ")
-			if line, err := reader.ReadString('\n'); err == nil {
+			if line, err := stdinReader.ReadString('\n'); err == nil {
 				s.VPN.Countries = strings.TrimSpace(line)
 			}
 			fmt.Println("note: gluetun's kill switch means a dropped tunnel takes qBittorrent offline until it reconnects")
@@ -268,6 +267,10 @@ func interactiveFill(s *state.State, o *options) error {
 		} else {
 			s.GPU = askGPU()
 		}
+		// Echo the outcome: a bare enter at the manual prompt used to pick
+		// "none" without saying so, and nobody noticed until Jellyfin came
+		// up without NVENC.
+		fmt.Printf("gpu: %s\n", s.GPU)
 	}
 
 	return s.Validate()
@@ -276,7 +279,7 @@ func interactiveFill(s *state.State, o *options) error {
 // askGPU is the manual override: detection is a convenience, never a wall.
 func askGPU() state.GPUMode {
 	fmt.Print("GPU mode — none, nvidia, intel (QuickSync), amd (VAAPI) [none]: ")
-	line, err := bufio.NewReader(os.Stdin).ReadString('\n')
+	line, err := stdinReader.ReadString('\n')
 	if err != nil {
 		return state.GPUNone
 	}
@@ -658,6 +661,13 @@ func lanIP() string {
 	return conn.LocalAddr().(*net.UDPAddr).IP.String()
 }
 
+// stdinReader is THE line reader for every prompt in the run flow. One
+// shared reader, never fresh ones: a discarded bufio.Reader keeps whatever
+// it buffered, so per-prompt readers can strand a typed answer and let the
+// NEXT question consume the leftovers — seen in the field as the GPU
+// confirm falling through to the manual mode question.
+var stdinReader = bufio.NewReader(os.Stdin)
+
 // confirm asks on the terminal; def is the answer for a bare enter.
 func confirm(q string, def bool) bool {
 	suffix := " [y/N] "
@@ -665,7 +675,7 @@ func confirm(q string, def bool) bool {
 		suffix = " [Y/n] "
 	}
 	fmt.Print(q + suffix)
-	line, err := bufio.NewReader(os.Stdin).ReadString('\n')
+	line, err := stdinReader.ReadString('\n')
 	if err != nil {
 		return def
 	}
