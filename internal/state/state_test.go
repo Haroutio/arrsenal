@@ -315,6 +315,82 @@ func TestWebPortsFollowHostForWebPortEnvApps(t *testing.T) {
 	}
 }
 
+func TestSplitStorageSemantics(t *testing.T) {
+	s := full()
+	if s.SplitStorage() {
+		t.Fatal("unset downloads root is not split")
+	}
+	if s.EffectiveDownloadsRoot() != s.DataRoot {
+		t.Fatal("effective root defaults to the data root")
+	}
+	s.DownloadsRoot = s.DataRoot
+	if s.SplitStorage() {
+		t.Fatal("downloads root equal to data root is not split")
+	}
+	s.DownloadsRoot = "/mnt/nvme/dl"
+	if !s.SplitStorage() || s.EffectiveDownloadsRoot() != "/mnt/nvme/dl" {
+		t.Fatalf("split semantics: %v %s", s.SplitStorage(), s.EffectiveDownloadsRoot())
+	}
+	if err := s.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	// Round-trips like every other field.
+	p := filepath.Join(t.TempDir(), "arrsenal.yaml")
+	if err := s.Save(p); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := Load(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.DownloadsRoot != "/mnt/nvme/dl" {
+		t.Fatalf("lost on round-trip: %q", loaded.DownloadsRoot)
+	}
+	// And obeys the charset rules.
+	s.DownloadsRoot = "/mnt/a b"
+	if err := s.Validate(); err == nil {
+		t.Fatal("space in downloads_root must be rejected")
+	}
+}
+
+func TestV1StateFilesStillLoad(t *testing.T) {
+	// A file written by a v0.1/v0.2 binary (schema v1) loads under v2:
+	// downgrades are gated, upgrades are seamless.
+	p := filepath.Join(t.TempDir(), "arrsenal.yaml")
+	v1 := `version: 1
+apps: [sonarr]
+puid: 1000
+pgid: 1000
+tz: Etc/UTC
+umask: "002"
+data_root: /data
+appdata_root: /opt/appdata
+gpu: none
+`
+	if err := os.WriteFile(p, []byte(v1), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s, err := Load(p)
+	if err != nil {
+		t.Fatalf("v1 file must load under CurrentVersion=%d: %v", CurrentVersion, err)
+	}
+	if s.SplitStorage() {
+		t.Fatal("v1 files are single-root by definition")
+	}
+	// Saving upgrades the stamp so old binaries refuse (never silently drop
+	// newer fields).
+	if err := s.Save(p); err != nil {
+		t.Fatal(err)
+	}
+	upgraded, err := Load(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if upgraded.Version != CurrentVersion {
+		t.Fatalf("saved version = %d, want %d", upgraded.Version, CurrentVersion)
+	}
+}
+
 func TestSaveRefusesInvalidState(t *testing.T) {
 	s := full()
 	s.GPU = "voodoo2"
