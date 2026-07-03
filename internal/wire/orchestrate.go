@@ -248,12 +248,63 @@ func Orchestrate(ctx context.Context, spec Spec) []Result {
 		results = append(results, runTRaSH(spec, keys)...)
 	}
 
-	// 7. Jellyseerr, best effort, last.
+	// 7. Seerr, best effort, last — after the Jellyfin lane, whose finished
+	// wizard the sign-in authenticates against.
 	if _, ok := sel["jellyseerr"]; ok {
-		results = append(results, EnsureJellyseerr(ctx, spec.Access("jellyseerr"), spec.Access("jellyseerr")))
+		t := SeerrTarget{
+			URL: spec.Access("jellyseerr"), HostAccessURL: spec.Access("jellyseerr"),
+			AdminUser: spec.AdminUser, AdminPass: spec.AdminPass,
+		}
+		switch {
+		case sel["jellyfin"].ID != "":
+			t.ServerType, t.ServerHost, t.ServerPort = "jellyfin", "jellyfin", sel["jellyfin"].Web.Container
+		case sel["emby"].ID != "":
+			t.ServerType, t.ServerHost, t.ServerPort = "emby", "emby", sel["emby"].Web.Container
+		case sel["plex"].ID != "":
+			t.ServerType = "plex"
+		}
+		sonarrProfile, radarrProfile := "", ""
+		if spec.TRaSH != nil {
+			sonarrProfile, radarrProfile = quality.MainProfileNames(*spec.TRaSH)
+		}
+		if a, ok := sel["sonarr"]; ok && keys["sonarr"] != "" {
+			if id, name, err := fetchQualityProfile(ctx, arrClient("sonarr"), a.APIBase, sonarrProfile); err == nil {
+				t.Sonarr = &SeerrArr{Name: "Sonarr", Host: "sonarr", Port: a.Web.Container, APIKey: keys["sonarr"],
+					ProfileID: id, ProfileName: name, RootFolder: "/data/media/" + a.MediaDir}
+			}
+		}
+		if a, ok := sel["radarr"]; ok && keys["radarr"] != "" {
+			if id, name, err := fetchQualityProfile(ctx, arrClient("radarr"), a.APIBase, radarrProfile); err == nil {
+				t.Radarr = &SeerrArr{Name: "Radarr", Host: "radarr", Port: a.Web.Container, APIKey: keys["radarr"],
+					ProfileID: id, ProfileName: name, RootFolder: "/data/media/" + a.MediaDir}
+			}
+		}
+		results = append(results, EnsureSeerr(ctx, t)...)
 	}
 
 	return results
+}
+
+// fetchQualityProfile picks the arr profile Seerr should request with: the
+// preferred name when it exists (the TRaSH main profile), the first profile
+// otherwise.
+func fetchQualityProfile(ctx context.Context, c *Client, apiBase, preferred string) (int, string, error) {
+	var profiles []struct {
+		ID   int    `json:"id"`
+		Name string `json:"name"`
+	}
+	if err := c.GetJSON(ctx, apiBase+"/qualityprofile", &profiles); err != nil {
+		return 0, "", err
+	}
+	if len(profiles) == 0 {
+		return 0, "", fmt.Errorf("no quality profiles")
+	}
+	for _, p := range profiles {
+		if p.Name == preferred {
+			return p.ID, p.Name, nil
+		}
+	}
+	return profiles[0].ID, profiles[0].Name, nil
 }
 
 func runTRaSH(spec Spec, keys map[string]string) []Result {

@@ -161,6 +161,13 @@ func radarrGroups(a Answers) []cfGroup {
 	}
 }
 
+// MainProfileNames returns the display names of the main profiles the
+// answers select — the names the synced profiles carry inside the arrs.
+// Consumers (Seerr's default profile) match against these.
+func MainProfileNames(a Answers) (sonarr, radarr string) {
+	return sonarrProfiles(a)[0].Name, radarrProfiles(a)[0].Name
+}
+
 // RecyclarrConfig renders recyclarr.yml for the given instances. Instances
 // are optional (nil = app not selected); at least one is required. Output is
 // deterministic; the API keys appear here by necessity — the file lands 0600
