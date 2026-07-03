@@ -14,23 +14,34 @@ type Runner func(args ...string) (string, error)
 // the CLI is the stable, universally-present interface (the compose plugin
 // has no usable Go API), and preflight/bring-up need nothing more.
 type Docker struct {
-	run Runner
+	run   Runner
+	runIn RunnerIn
 }
 
 // New returns a Docker that shells out to the real CLI.
 func New() *Docker {
-	return &Docker{run: func(args ...string) (string, error) {
-		out, err := exec.Command("docker", args...).CombinedOutput()
-		if err != nil {
-			return "", fmt.Errorf("docker %s: %v\n%s", strings.Join(args, " "), err, out)
-		}
-		return string(out), nil
-	}}
+	return &Docker{
+		run: func(args ...string) (string, error) {
+			out, err := exec.Command("docker", args...).CombinedOutput()
+			if err != nil {
+				return "", fmt.Errorf("docker %s: %v\n%s", strings.Join(args, " "), err, out)
+			}
+			return string(out), nil
+		},
+		runIn: defaultRunnerIn,
+	}
 }
 
-// NewWithRunner returns a Docker backed by a fake, for tests.
-func NewWithRunner(r Runner) *Docker {
-	return &Docker{run: r}
+// NewWithRunner returns a Docker backed by fakes, for tests. runIn may be
+// nil when the code under test never runs compose commands.
+func NewWithRunner(r Runner, runIn ...RunnerIn) *Docker {
+	d := &Docker{run: r, runIn: func(string, ...string) (string, error) {
+		return "", fmt.Errorf("no RunnerIn provided to this fake")
+	}}
+	if len(runIn) > 0 {
+		d.runIn = runIn[0]
+	}
+	return d
 }
 
 // Available reports whether the docker CLI and compose plugin respond.
