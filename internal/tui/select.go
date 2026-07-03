@@ -145,7 +145,8 @@ func (m SelectModel) View() string {
 		if r.selected {
 			box = styleSelected.Render("[x]")
 		}
-		line := fmt.Sprintf("%s%s %-12s %s", cursor, box, r.app.Name, styleDim.Render(r.app.Description))
+		line := fmt.Sprintf("%s%s %-12s %s", cursor, box, r.app.Name,
+			styleDim.Render(fmt.Sprintf("%s · port %d", r.app.Description, r.app.Web.Host)))
 		b.WriteString(line + "\n")
 
 		for _, w := range r.app.Warnings {
