@@ -46,9 +46,9 @@ func (f *stateSequence) run(args ...string) (string, error) {
 
 func TestWaitReadyPollsUntilRunning(t *testing.T) {
 	fake := &stateSequence{states: map[string][]string{
-		"sonarr":  {"created\t", "running\t"},
-		"radarr":  {"running\thealthy"},
-		"sabnzbd": {"running\tstarting", "running\thealthy"},
+		"sonarr":  {"created|", "running|"},
+		"radarr":  {"running|healthy"},
+		"sabnzbd": {"running|starting", "running|healthy"},
 	}}
 	d := NewWithRunner(fake.run)
 	got := d.WaitReady([]string{"sonarr", "radarr", "sabnzbd"}, time.Second, time.Millisecond)
@@ -61,7 +61,7 @@ func TestWaitReadyPollsUntilRunning(t *testing.T) {
 
 func TestWaitReadyReportsCrashesImmediately(t *testing.T) {
 	fake := &stateSequence{states: map[string][]string{
-		"sonarr": {"exited\t"},
+		"sonarr": {"exited|"},
 	}}
 	d := NewWithRunner(fake.run)
 	start := time.Now()
@@ -81,7 +81,7 @@ func TestWaitReadyReportsCrashesImmediately(t *testing.T) {
 
 func TestWaitReadyTimesOutWithHonestState(t *testing.T) {
 	fake := &stateSequence{states: map[string][]string{
-		"sonarr": {"running\tstarting"}, // healthcheck never turns healthy
+		"sonarr": {"running|starting"}, // healthcheck never turns healthy
 	}}
 	d := NewWithRunner(fake.run)
 	got := d.WaitReady([]string{"sonarr"}, 20*time.Millisecond, 5*time.Millisecond)

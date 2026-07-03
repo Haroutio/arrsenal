@@ -147,7 +147,7 @@ func TestPortFreeProbesForReal(t *testing.T) {
 
 func TestDockerxContainersParsing(t *testing.T) {
 	fake := dockerx.NewWithRunner(func(_ ...string) (string, error) {
-		return "sonarr\tarrsenal\nplex\t\nqbittorrent\tsomeones-stack\n\n", nil
+		return "sonarr|arrsenal\nplex|\nqbittorrent|someones-stack\n\n", nil
 	})
 	got, err := fake.Containers()
 	if err != nil {
