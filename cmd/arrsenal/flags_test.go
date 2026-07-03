@@ -70,6 +70,13 @@ func TestHeadlessFlagsCoverAllStateKnobs(t *testing.T) {
 	}
 }
 
+func TestTrashFlags(t *testing.T) {
+	o := parseFlags([]string{"--trash", "--trash-resolution", "2160p", "--trash-anime"}, os.Stdout)
+	if !o.trash || o.trashResolution != "2160p" || o.trashSource != "bluray-web" || !o.trashAnime {
+		t.Fatalf("parsed: %+v", o)
+	}
+}
+
 func TestUpdateRefusesWithoutState(t *testing.T) {
 	o := parseFlags([]string{"--state", "/nonexistent/dir/arrsenal.yaml"}, os.Stdout)
 	err := runUpdate(*o)

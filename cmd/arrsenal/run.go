@@ -87,6 +87,14 @@ func applyFlagOverrides(s *state.State, o options, fresh bool) {
 	if o.vpnCountries != "" {
 		s.VPN.Countries = o.vpnCountries
 	}
+	if o.trash {
+		s.TRaSH = state.TRaSH{
+			Enabled:    true,
+			Resolution: o.trashResolution,
+			Source:     o.trashSource,
+			Anime:      o.trashAnime,
+		}
+	}
 	if o.tz != "" && (fresh || o.yes) {
 		s.TZ = o.tz
 	}
@@ -186,6 +194,25 @@ func interactiveFill(s *state.State, o *options) error {
 			if line, err := bufio.NewReader(os.Stdin).ReadString('\n'); err == nil {
 				o.plexClaim = strings.TrimSpace(line)
 			}
+		}
+	}
+
+	// 5.5 TRaSH quality settings (issue #60): offered when an eligible arr
+	// is selected and nothing is configured yet. Consent here IS the
+	// adoption gate — on an existing arr this converges its TRaSH-named
+	// profiles, which the prompt says out loud.
+	if (selectedID(s, "sonarr") || selectedID(s, "radarr")) && !s.TRaSH.Enabled && !o.trash {
+		if confirm("Apply TRaSH-guide quality settings to Sonarr/Radarr (recommended sizes, custom formats, profiles via Recyclarr)?", false) {
+			t := state.TRaSH{Enabled: true, Resolution: "1080p", Source: "bluray-web"}
+			if confirm("Target 4K (2160p) instead of 1080p?", false) {
+				t.Resolution = "2160p"
+			}
+			if confirm("Prefer full-quality remuxes over the standard Bluray/WEB tier (much larger files)?", false) {
+				t.Source = "remux"
+			}
+			t.Anime = confirm("Also apply the anime profiles?", false)
+			fmt.Println("note: this creates/updates the TRaSH-named quality profiles in your arrs on every run — existing custom profiles are untouched")
+			s.TRaSH = t
 		}
 	}
 

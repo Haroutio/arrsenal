@@ -11,6 +11,7 @@ import (
 
 	"github.com/goccy/go-yaml"
 
+	"github.com/Haroutio/arrsenal/internal/quality"
 	"github.com/Haroutio/arrsenal/internal/registry"
 )
 
@@ -24,7 +25,8 @@ import (
 //
 // History: v1 — initial. v2 — adds optional downloads_root (split storage).
 // v3 — adds vpn (gluetun in front of qBittorrent) + its secret.
-const CurrentVersion = 3
+// v4 — adds trash (TRaSH-guide quality answers, synced via Recyclarr).
+const CurrentVersion = 4
 
 // DefaultPath is where Arrsenal keeps everything it owns (DESIGN.md §1).
 const DefaultPath = "/opt/arrsenal/arrsenal.yaml"
@@ -53,6 +55,14 @@ type Secrets struct {
 	// rendered into gluetun's own 0600 env-file — never into the
 	// world-readable compose artifacts.
 	WireguardPrivateKey string `yaml:"wireguard_private_key,omitempty"`
+}
+
+// TRaSH is the persisted form of the quality answers (issue #60).
+type TRaSH struct {
+	Enabled    bool   `yaml:"enabled,omitempty"`
+	Resolution string `yaml:"resolution,omitempty"` // 1080p | 2160p
+	Source     string `yaml:"source,omitempty"`     // bluray-web | remux
+	Anime      bool   `yaml:"anime,omitempty"`
 }
 
 // VPN routes qBittorrent through a gluetun tunnel (issue #27). Provider set
@@ -107,6 +117,11 @@ type State struct {
 	JellyfinHostNetwork bool `yaml:"jellyfin_host_network,omitempty"`
 
 	VPN VPN `yaml:"vpn,omitempty"`
+
+	// TRaSH holds the quality answers (issue #60); Enabled means the
+	// Recyclarr sync runs every wiring pass, converging Sonarr/Radarr onto
+	// the TRaSH-guide profiles the answers select.
+	TRaSH TRaSH `yaml:"trash,omitempty"`
 
 	Secrets Secrets `yaml:"secrets,omitempty"`
 }
@@ -346,6 +361,14 @@ func (s *State) Validate() error {
 		return fmt.Errorf("unknown gpu mode %q (valid: none, nvidia, intel, amd)", s.GPU)
 	}
 
+	if s.TRaSH.Enabled {
+		if !contains(s.Apps, "sonarr") && !contains(s.Apps, "radarr") {
+			return errors.New("trash quality sync is enabled but neither Sonarr nor Radarr is selected")
+		}
+		if err := (quality.Answers{Resolution: s.TRaSH.Resolution, Source: s.TRaSH.Source, Anime: s.TRaSH.Anime}).Validate(); err != nil {
+			return fmt.Errorf("trash quality answers: %w", err)
+		}
+	}
 	if s.VPNEnabled() {
 		if !contains(s.Apps, "qbittorrent") {
 			return errors.New("vpn is configured but qBittorrent is not selected — the tunnel would carry nothing")
