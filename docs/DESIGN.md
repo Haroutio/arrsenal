@@ -37,8 +37,13 @@ Two components, each doing only what it's good at:
 - **`install.sh`** — thin bash bootstrap (~150 lines, dumb on purpose). Detects
   distro/arch, offers to install Docker + the compose plugin if missing, downloads the
   right `arrsenal` release binary, verifies its SHA-256 checksum against the release's
-  checksums file, and execs it. This is the entire `curl | bash` surface, and it is
-  always fetched release-pinned (never from `main`).
+  checksums file, and execs it. This is the entire `curl | bash` surface. The README
+  one-liner fetches it from `main` (amended v0.4: a version in the URL goes stale
+  every release and is hostile to typing by hand). Integrity rests where it always
+  did — on the checksum-verified, release-built binary — and the read-before-you-run
+  path runs the exact file you read. The cost is that the script itself is mutable at
+  fetch time, which the thin-bootstrap rule (below) is what keeps acceptable:
+  install.sh stays dumb, stable, and reviewable in one screenful.
 - **`arrsenal`** — a single static Go binary. Bubble Tea TUI, state file handling,
   compose/`.env` generation (structs marshalled to YAML — no string templating),
   preflight checks, the wiring engine (net/http clients), and the test suite. No runtime
@@ -188,10 +193,11 @@ GPU absence never blocks an install.
 2. **The admin password is used, not kept.** Collected in the TUI, pushed to each app's
    API, then dropped. (qBittorrent's pre-seeded password is the one persisted secret,
    flagged in docs.)
-3. **`curl | bash`, hardened and honest.** Release-pinned script URL, checksum-verified
-   binary download, a "download and read it first" path in the README above the fold,
+3. **`curl | bash`, hardened and honest.** Checksum-verified binary download from a
+   GitHub release, a "download and read it first" path in the README above the fold,
    and the script never asks to be piped into sudo — it requests privilege itself, per
-   action, announcing why first (see §10).
+   action, announcing why first (see §10). The script URL points at `main` (amended
+   v0.4, §2): the binary checksum is the integrity boundary, not the script ref.
 
 ## 10. Prerequisites & distro tiers
 
