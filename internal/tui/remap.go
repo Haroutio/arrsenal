@@ -178,7 +178,7 @@ func (m *RemapModel) refocus() {
 // View implements the render.
 func (m RemapModel) View() string {
 	var b strings.Builder
-	b.WriteString(styleTitle.Render("Conflicts found") + "\n\n")
+	b.WriteString(header("Conflicts found") + "\n")
 	for _, c := range m.names {
 		b.WriteString(styleWarn.Render("✗ "+c.Detail) + "\n")
 	}
@@ -189,10 +189,10 @@ func (m RemapModel) View() string {
 	if m.err != "" {
 		b.WriteString("\n" + styleWarn.Render("✗ "+m.err) + "\n")
 	}
-	help := "enter apply · b back to selection · esc quit"
+	pairs := []string{"enter", "apply", "b", "back to selection", "esc", "quit"}
 	if len(m.inputs) > 1 {
-		help = "tab next · " + help
+		pairs = append([]string{"tab", "next"}, pairs...)
 	}
-	b.WriteString(styleHelp.Render(help))
+	b.WriteString(helpBar(pairs...))
 	return b.String()
 }
