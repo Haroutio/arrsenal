@@ -4,8 +4,11 @@
 [![Latest release](https://img.shields.io/github/v/release/Haroutio/arrsenal)](https://github.com/Haroutio/arrsenal/releases/latest)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-Arrsenal installs a complete self-hosted media server in one command, then configures
-all the apps to work with each other.
+One command installs and wires a complete self-hosted media server: **Jellyfin**
+(or Plex/Emby), **Sonarr**, **Radarr**, **Lidarr**, **Prowlarr**, **Bazarr**,
+**SABnzbd**, **qBittorrent**, **Seerr** requests, and a **Homepage** dashboard —
+connected to each other and configured with TRaSH-guide quality profiles,
+automatically.
 
 Plenty of scripts can start a dozen containers. What you're left with afterwards is a
 dozen setup wizards: Sonarr doesn't know your download client exists, Prowlarr isn't
