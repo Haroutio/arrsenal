@@ -31,3 +31,29 @@ func TestLanIPReturnsSomethingUsable(t *testing.T) {
 		t.Fatal("lanIP must always produce a non-empty host")
 	}
 }
+
+func TestResolveUsenetProvider(t *testing.T) {
+	// Missing any of the trio → nil: never register a half-configured server.
+	if p := resolveUsenetProvider(options{usenetProvider: "newshosting", usenetUser: "u"}); p != nil {
+		t.Fatalf("missing password must resolve to nil, got %+v", p)
+	}
+
+	// A preset fills host/port/ssl/connections.
+	p := resolveUsenetProvider(options{usenetProvider: "Newshosting", usenetUser: "u", usenetPass: "pw"})
+	if p == nil || p.Host != "news.newshosting.com" || p.Port != 563 || !p.SSL || p.Connections != 30 {
+		t.Fatalf("preset not applied: %+v", p)
+	}
+
+	// A hostname is a custom provider on the standard TLS port.
+	p = resolveUsenetProvider(options{usenetProvider: "news.example.net", usenetUser: "u", usenetPass: "pw"})
+	if p == nil || p.Host != "news.example.net" || p.Port != 563 || p.Connections != 20 {
+		t.Fatalf("custom host not applied: %+v", p)
+	}
+
+	// Explicit overrides win.
+	p = resolveUsenetProvider(options{usenetProvider: "eweka", usenetUser: "u", usenetPass: "pw",
+		usenetPort: 119, usenetConnections: 8})
+	if p == nil || p.Port != 119 || p.Connections != 8 {
+		t.Fatalf("overrides not applied: %+v", p)
+	}
+}

@@ -144,3 +144,76 @@ func EnsureSABWhitelist(ctx context.Context, sab *Client, hostname string) Resul
 	}
 	return Result{Connection: conn, Outcome: OutcomeWired}
 }
+
+// UsenetProvider is one news server as SABnzbd should know it. Presets fill
+// everything but the credentials; a custom provider is just a hostname.
+type UsenetProvider struct {
+	Name        string // display name, e.g. "Newshosting" — also SAB's server keyword
+	Host        string
+	Port        int
+	SSL         bool
+	Connections int
+	Username    string
+	Password    string
+}
+
+// UsenetPresets are the major commercial providers, keyed by the lowercase
+// name a user types. Ports are the standard TLS endpoints; connection counts
+// are each provider's documented allowance at the common tier (SAB treats
+// too-high counts as errors mid-download, so conservative beats optimistic).
+var UsenetPresets = map[string]UsenetProvider{
+	"newshosting":  {Name: "Newshosting", Host: "news.newshosting.com", Port: 563, SSL: true, Connections: 30},
+	"eweka":        {Name: "Eweka", Host: "news.eweka.nl", Port: 563, SSL: true, Connections: 20},
+	"usenetserver": {Name: "UsenetServer", Host: "news.usenetserver.com", Port: 563, SSL: true, Connections: 20},
+	"frugal":       {Name: "Frugal Usenet", Host: "news.frugalusenet.com", Port: 563, SSL: true, Connections: 30},
+	"easynews":     {Name: "Easynews", Host: "news.easynews.com", Port: 563, SSL: true, Connections: 20},
+}
+
+// EnsureSABServer registers the news server — the piece without which the
+// whole stack downloads nothing. Idempotent by host: any existing server
+// with the same address is the user's and is never modified (not even the
+// credentials — a typo'd password is fixed in SAB's UI, not by re-running
+// the installer over a working config).
+func EnsureSABServer(ctx context.Context, sab *Client, p UsenetProvider) Result {
+	conn := fmt.Sprintf("SABnzbd ← usenet provider (%s)", p.Host)
+	sab.WithRedaction(p.Password)
+
+	var cfg struct {
+		Config struct {
+			Servers []struct {
+				Host string `json:"host"`
+			} `json:"servers"`
+		} `json:"config"`
+	}
+	if err := sab.GetJSON(ctx, sabPath(sab.key, "get_config", url.Values{"section": {"servers"}}), &cfg); err != nil {
+		return Result{Connection: conn, Outcome: OutcomeFailed,
+			Detail: fmt.Sprintf("reading SABnzbd servers: %v", err)}
+	}
+	for _, s := range cfg.Config.Servers {
+		if strings.EqualFold(s.Host, p.Host) {
+			return Result{Connection: conn, Outcome: OutcomeExisted,
+				Detail: "server already configured — left untouched"}
+		}
+	}
+
+	ssl := "0"
+	if p.SSL {
+		ssl = "1"
+	}
+	err := sab.GetJSON(ctx, sabPath(sab.key, "set_config", url.Values{
+		"section":     {"servers"},
+		"keyword":     {p.Name},
+		"host":        {p.Host},
+		"port":        {fmt.Sprintf("%d", p.Port)},
+		"ssl":         {ssl},
+		"username":    {p.Username},
+		"password":    {p.Password},
+		"connections": {fmt.Sprintf("%d", p.Connections)},
+		"enable":      {"1"},
+	}), nil)
+	if err != nil {
+		return Result{Connection: conn, Outcome: OutcomeFailed,
+			Detail: fmt.Sprintf("adding the server: %v", err)}
+	}
+	return Result{Connection: conn, Outcome: OutcomeWired}
+}

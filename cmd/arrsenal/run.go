@@ -229,6 +229,32 @@ func interactiveFill(s *state.State, o *options) error {
 		}
 	}
 
+	// 5.7 Usenet provider (issue #103): the one setting without which the
+	// stack downloads nothing. Only offered for a FRESH SABnzbd — an adopted
+	// one already has the user's servers, or their deliberate absence.
+	if selectedID(s, "sabnzbd") && o.usenetProvider == "" {
+		if entries, err := os.ReadDir(filepath.Join(s.AppdataRoot, "sabnzbd")); err != nil || len(entries) == 0 {
+			if confirm("Add your usenet provider to SABnzbd now (Newshosting, Eweka, UsenetServer, Frugal, Easynews, or a hostname)?", false) {
+				fmt.Print("Provider [newshosting]: ")
+				if line, err := stdinReader.ReadString('\n'); err == nil {
+					o.usenetProvider = strings.TrimSpace(line)
+				}
+				if o.usenetProvider == "" {
+					o.usenetProvider = "newshosting"
+				}
+				fmt.Print("Provider username: ")
+				if line, err := stdinReader.ReadString('\n'); err == nil {
+					o.usenetUser = strings.TrimSpace(line)
+				}
+				fmt.Print("Provider password: ")
+				if pw, err := term.ReadPassword(int(os.Stdin.Fd())); err == nil {
+					o.usenetPass = strings.TrimSpace(string(pw))
+				}
+				fmt.Println()
+			}
+		}
+	}
+
 	// 6. VPN for qBittorrent (issue #27): only offered when qBittorrent is
 	// selected and nothing is configured yet; flags outrank the prompt.
 	if selectedID(s, "qbittorrent") && !s.VPNEnabled() && o.vpnProvider == "" {
@@ -575,7 +601,8 @@ func buildSpec(s *state.State, o options, adopted map[string]bool) wire.Spec {
 		Adopted:     adopted,
 		AppdataRoot: s.AppdataRoot,
 		PUID:        s.PUID, PGID: s.PGID,
-		TRaSH: trash, RecyclarrDir: recyclarrDir, RunRecyclarr: runRecyclarr,
+		Usenet: resolveUsenetProvider(o),
+		TRaSH:  trash, RecyclarrDir: recyclarrDir, RunRecyclarr: runRecyclarr,
 		AdminUser: o.adminUser,
 		AdminPass: o.adminPass,
 		QBitPass:  s.Secrets.QBittorrentPassword,
@@ -599,6 +626,29 @@ func buildSpec(s *state.State, o options, adopted map[string]bool) wire.Spec {
 		QBitContainerPort: qbitContainer,
 		QBitHost:          qbitHost,
 	}
+}
+
+// resolveUsenetProvider turns the flag/prompt values into a server target:
+// a preset name fills everything, a bare hostname is a custom provider on
+// the standard TLS port. Nil when credentials are missing — the wiring
+// never registers a half-configured server.
+func resolveUsenetProvider(o options) *wire.UsenetProvider {
+	if o.usenetProvider == "" || o.usenetUser == "" || o.usenetPass == "" {
+		return nil
+	}
+	p, ok := wire.UsenetPresets[strings.ToLower(strings.TrimSpace(o.usenetProvider))]
+	if !ok {
+		p = wire.UsenetProvider{Name: "Usenet", Host: strings.TrimSpace(o.usenetProvider),
+			Port: 563, SSL: true, Connections: 20}
+	}
+	if o.usenetPort != 0 {
+		p.Port = o.usenetPort
+	}
+	if o.usenetConnections != 0 {
+		p.Connections = o.usenetConnections
+	}
+	p.Username, p.Password = o.usenetUser, o.usenetPass
+	return &p
 }
 
 // recyclarrImage is pinned to the major: the generated config speaks the v8

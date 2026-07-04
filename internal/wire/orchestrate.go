@@ -20,6 +20,9 @@ type Spec struct {
 	Apps        []registry.App  // selected, registry order
 	Adopted     map[string]bool // app ID → appdata predated this run
 	AppdataRoot string
+	// Usenet is the news server to register in SABnzbd (nil = none given).
+	// The single setting without which the whole stack downloads nothing.
+	Usenet *UsenetProvider
 	// PUID/PGID own the tail configs this pass writes: root-owned 0600
 	// files are invisible to the container users that must read them
 	// (Homepage rendered a red parse error instead of a dashboard — field
@@ -100,6 +103,9 @@ func Orchestrate(ctx context.Context, spec Spec) []Result {
 			if a.Role == registry.RolePVR {
 				steps = append(steps, EnsureSABCategory(ctx, sab, a.MediaDir))
 			}
+		}
+		if spec.Usenet != nil {
+			steps = append(steps, EnsureSABServer(ctx, sab, *spec.Usenet))
 		}
 		results = append(results, steps...)
 		sabReady = !Failed(steps)
