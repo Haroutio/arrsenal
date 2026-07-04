@@ -23,6 +23,9 @@ type Spec struct {
 	// Usenet is the news server to register in SABnzbd (nil = none given).
 	// The single setting without which the whole stack downloads nothing.
 	Usenet *UsenetProvider
+	// Indexers are usenet indexers to register in Prowlarr (generic
+	// Newznab), from where they propagate to every arr.
+	Indexers []NewznabIndexer
 	// PUID/PGID own the tail configs this pass writes: root-owned 0600
 	// files are invisible to the container users that must read them
 	// (Homepage rendered a red parse error instead of a dashboard — field
@@ -160,6 +163,19 @@ func Orchestrate(ctx context.Context, spec Spec) []Result {
 		}
 
 		results = append(results, EnsureRootFolder(ctx, c, a.APIBase, a.Name, "/data/media/"+a.MediaDir))
+	}
+
+	// 4.5 Indexers: registered in Prowlarr, which syncs them everywhere.
+	// Afterwards the honesty check: a report that ends "done" over a stack
+	// that cannot search anything would be a lie by omission.
+	if prowlarrSelected && keys["prowlarr"] != "" {
+		prowlarr := NewClient(spec.Access("prowlarr"), keys["prowlarr"], "X-Api-Key")
+		for _, ix := range spec.Indexers {
+			results = append(results, EnsureNewznabIndexer(ctx, prowlarr, ix))
+		}
+		if r := CheckIndexers(ctx, prowlarr, spec.Access("prowlarr")); r != nil {
+			results = append(results, *r)
+		}
 	}
 
 	// 5. Jellyfin lane. Its minted API key feeds the dashboard widget below.

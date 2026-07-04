@@ -255,6 +255,32 @@ func interactiveFill(s *state.State, o *options) error {
 		}
 	}
 
+	// 5.8 Indexers (issue #104): almost every usenet indexer is generic
+	// Newznab — URL plus API key — and Prowlarr propagates them to every
+	// arr. Prowlarr validates on save, so typos surface in the report.
+	if selectedID(s, "prowlarr") && o.indexerName == "" {
+		for confirm("Add a usenet indexer to Prowlarr now (most are Newznab: URL + API key)?", false) {
+			var ix wire.NewznabIndexer
+			fmt.Print("Indexer name: ")
+			if line, err := stdinReader.ReadString('\n'); err == nil {
+				ix.Name = strings.TrimSpace(line)
+			}
+			fmt.Print("Indexer URL: ")
+			if line, err := stdinReader.ReadString('\n'); err == nil {
+				ix.URL = strings.TrimSpace(line)
+			}
+			fmt.Print("Indexer API key: ")
+			if line, err := stdinReader.ReadString('\n'); err == nil {
+				ix.APIKey = strings.TrimSpace(line)
+			}
+			if ix.Name != "" && ix.URL != "" && ix.APIKey != "" {
+				o.indexers = append(o.indexers, ix)
+			} else {
+				fmt.Println("incomplete — skipped (all three fields are needed)")
+			}
+		}
+	}
+
 	// 6. VPN for qBittorrent (issue #27): only offered when qBittorrent is
 	// selected and nothing is configured yet; flags outrank the prompt.
 	if selectedID(s, "qbittorrent") && !s.VPNEnabled() && o.vpnProvider == "" {
@@ -601,8 +627,9 @@ func buildSpec(s *state.State, o options, adopted map[string]bool) wire.Spec {
 		Adopted:     adopted,
 		AppdataRoot: s.AppdataRoot,
 		PUID:        s.PUID, PGID: s.PGID,
-		Usenet: resolveUsenetProvider(o),
-		TRaSH:  trash, RecyclarrDir: recyclarrDir, RunRecyclarr: runRecyclarr,
+		Usenet:   resolveUsenetProvider(o),
+		Indexers: resolveIndexers(o),
+		TRaSH:    trash, RecyclarrDir: recyclarrDir, RunRecyclarr: runRecyclarr,
 		AdminUser: o.adminUser,
 		AdminPass: o.adminPass,
 		QBitPass:  s.Secrets.QBittorrentPassword,
@@ -649,6 +676,16 @@ func resolveUsenetProvider(o options) *wire.UsenetProvider {
 	}
 	p.Username, p.Password = o.usenetUser, o.usenetPass
 	return &p
+}
+
+// resolveIndexers merges the flag-supplied indexer (if complete) with any
+// entered interactively.
+func resolveIndexers(o options) []wire.NewznabIndexer {
+	out := append([]wire.NewznabIndexer{}, o.indexers...)
+	if o.indexerName != "" && o.indexerURL != "" && o.indexerKey != "" {
+		out = append(out, wire.NewznabIndexer{Name: o.indexerName, URL: o.indexerURL, APIKey: o.indexerKey})
+	}
+	return out
 }
 
 // recyclarrImage is pinned to the major: the generated config speaks the v8
