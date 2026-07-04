@@ -215,5 +215,36 @@ func EnsureSABServer(ctx context.Context, sab *Client, p UsenetProvider) Result 
 		return Result{Connection: conn, Outcome: OutcomeFailed,
 			Detail: fmt.Sprintf("adding the server: %v", err)}
 	}
-	return Result{Connection: conn, Outcome: OutcomeWired}
+
+	// Registration proves nothing about the credentials — SAB accepts any
+	// config and only fails on the first real download. Its own test
+	// endpoint (the UI's "Test Server" button) does a live NNTP login, so
+	// a ✓ here means TESTED, and a typo'd password is a ⚠ now instead of
+	// a mystery next week. Only new servers get here; existing entries
+	// were never touched, so they are never probed either.
+	var test struct {
+		Value struct {
+			Result  bool   `json:"result"`
+			Message string `json:"message"`
+		} `json:"value"`
+	}
+	err = sab.GetJSON(ctx, sabPath(sab.key, "config", url.Values{
+		"name":        {"test_server"},
+		"host":        {p.Host},
+		"port":        {fmt.Sprintf("%d", p.Port)},
+		"ssl":         {ssl},
+		"username":    {p.Username},
+		"password":    {p.Password},
+		"connections": {"2"},
+	}), &test)
+	switch {
+	case err != nil:
+		return Result{Connection: conn, Outcome: OutcomeWired,
+			Detail: "registered (connection test could not run)"}
+	case !test.Value.Result:
+		return Result{Connection: conn, Outcome: OutcomeManual,
+			Detail: fmt.Sprintf("registered, but SABnzbd's connection test failed: %s — check the server in SAB's web UI (Settings → Servers)",
+				test.Value.Message)}
+	}
+	return Result{Connection: conn, Outcome: OutcomeWired, Detail: "connection tested"}
 }
