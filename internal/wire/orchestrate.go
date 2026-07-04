@@ -64,6 +64,14 @@ type Spec struct {
 	RunRecyclarr func() (output string, err error)
 
 	KeyTimeout time.Duration // how long to wait for each app's key
+
+	// Progress, when non-nil, receives each step's Result the moment it
+	// lands — the wiring narrates itself live (issue #115). The report at
+	// the end stays the receipt.
+	Progress func(Result)
+	// Stage, when non-nil, announces the slow, otherwise-silent stretches
+	// (key waits, the Recyclarr sync, Jellyfin's wizard).
+	Stage func(string)
 }
 
 // Orchestrate runs the whole wiring pass (DESIGN.md §7) and returns the
@@ -86,7 +94,23 @@ func Orchestrate(ctx context.Context, spec Spec) []Result {
 	// for apps that are genuinely someone else's.
 	settingsAdopted := func(id string) bool { return spec.Adopted[id] && !spec.Owned[id] }
 
+	// emit records results AND narrates them live (issue #115).
+	emit := func(rs []Result, add ...Result) []Result {
+		for _, r := range add {
+			if spec.Progress != nil {
+				spec.Progress(r)
+			}
+		}
+		return append(rs, add...)
+	}
+	stage := func(msg string) {
+		if spec.Stage != nil {
+			spec.Stage(msg)
+		}
+	}
+
 	// 1. Keys: read what every key-bearing selected app generated.
+	stage("collecting API keys (freshly started apps can take a minute to mint them)")
 	keys := map[string]string{}
 	for _, a := range spec.Apps {
 		if a.Key.Format == registry.KeyNone {
@@ -94,7 +118,7 @@ func Orchestrate(ctx context.Context, spec Spec) []Result {
 		}
 		key, err := ReadKey(ctx, a, spec.AppdataRoot, spec.KeyTimeout, time.Second)
 		if err != nil {
-			results = append(results, Result{
+			results = emit(results, Result{
 				Connection: fmt.Sprintf("%s API key", a.Name), Outcome: OutcomeFailed,
 				Detail: err.Error()})
 			continue
@@ -126,10 +150,10 @@ func Orchestrate(ctx context.Context, spec Spec) []Result {
 		// not silently suppress every Sonarr→SABnzbd connection (audit
 		// finding): SAB without a working server is still a valid download
 		// client the user finishes later.
-		results = append(results, steps...)
+		results = emit(results, steps...)
 		sabReady = !Failed(steps)
 		if spec.Usenet != nil {
-			results = append(results, EnsureSABServer(ctx, sab, *spec.Usenet))
+			results = emit(results, EnsureSABServer(ctx, sab, *spec.Usenet))
 		}
 	}
 	_, qbitSelected := sel["qbittorrent"]
@@ -147,18 +171,18 @@ func Orchestrate(ctx context.Context, spec Spec) []Result {
 			// a failure on adopted and fresh alike; calling it "own
 			// credentials" would hide a dead container (audit finding).
 			if settingsAdopted("qbittorrent") && errors.Is(err, ErrQBitCredentials) {
-				results = append(results, Result{
+				results = emit(results, Result{
 					Connection: "qBittorrent ← category save paths", Outcome: OutcomeExisted,
 					Detail: "adopted qBittorrent has its own credentials — categories left as configured"})
 			} else {
-				results = append(results, Result{
+				results = emit(results, Result{
 					Connection: "qBittorrent ← category save paths", Outcome: OutcomeFailed,
 					Detail: err.Error()})
 			}
 		} else {
 			for _, a := range spec.Apps {
 				if a.Role == registry.RolePVR {
-					results = append(results,
+					results = emit(results,
 						EnsureQBitCategory(ctx, qc, a.MediaDir, "/data/torrents/"+a.MediaDir))
 				}
 			}
@@ -174,7 +198,7 @@ func Orchestrate(ctx context.Context, spec Spec) []Result {
 			if a.APIBase == "" || keys[a.ID] == "" {
 				continue
 			}
-			results = append(results,
+			results = emit(results,
 				EnsureAuth(ctx, arrClient(a.ID), a.Name, a.APIBase, spec.AdminUser, spec.AdminPass, spec.Adopted[a.ID]))
 		}
 	}
@@ -188,7 +212,7 @@ func Orchestrate(ctx context.Context, spec Spec) []Result {
 		c := arrClient(a.ID)
 
 		if prowlarrSelected && keys["prowlarr"] != "" {
-			results = append(results, EnsureApplication(ctx,
+			results = emit(results, EnsureApplication(ctx,
 				NewClient(spec.Access("prowlarr"), keys["prowlarr"], "X-Api-Key"),
 				ArrTarget{
 					Name: a.Name, Implementation: a.Name,
@@ -199,20 +223,20 @@ func Orchestrate(ctx context.Context, spec Spec) []Result {
 		}
 
 		if sabSelected && sabReady {
-			results = append(results, EnsureDownloadClient(ctx, c, DownloadClientTarget{
+			results = emit(results, EnsureDownloadClient(ctx, c, DownloadClientTarget{
 				ArrName: a.Name, APIBase: a.APIBase, ClientName: "SABnzbd", Implementation: "Sabnzbd",
 				Host: "sabnzbd", Port: 8080, Category: a.MediaDir, APIKey: keys["sabnzbd"],
 			}))
 		}
 		if qbitSelected && spec.QBitPass != "" {
-			results = append(results, EnsureDownloadClient(ctx, c, DownloadClientTarget{
+			results = emit(results, EnsureDownloadClient(ctx, c, DownloadClientTarget{
 				ArrName: a.Name, APIBase: a.APIBase, ClientName: "qBittorrent", Implementation: "QBittorrent",
 				Host: spec.QBitHost, Port: spec.QBitContainerPort, Category: a.MediaDir,
 				Username: "admin", Password: spec.QBitPass,
 			}))
 		}
 
-		results = append(results, EnsureRootFolder(ctx, c, a.APIBase, a.Name, "/data/media/"+a.MediaDir))
+		results = emit(results, EnsureRootFolder(ctx, c, a.APIBase, a.Name, "/data/media/"+a.MediaDir))
 	}
 
 	// 4.5 Indexers: registered in Prowlarr, which syncs them everywhere.
@@ -221,10 +245,10 @@ func Orchestrate(ctx context.Context, spec Spec) []Result {
 	if prowlarrSelected && keys["prowlarr"] != "" {
 		prowlarr := NewClient(spec.Access("prowlarr"), keys["prowlarr"], "X-Api-Key")
 		for _, ix := range spec.Indexers {
-			results = append(results, EnsureNewznabIndexer(ctx, prowlarr, ix))
+			results = emit(results, EnsureNewznabIndexer(ctx, prowlarr, ix))
 		}
 		if r := CheckIndexers(ctx, prowlarr, spec.Access("prowlarr")); r != nil {
-			results = append(results, *r)
+			results = emit(results, *r)
 		}
 	}
 
@@ -232,11 +256,12 @@ func Orchestrate(ctx context.Context, spec Spec) []Result {
 	jellyfinKey := ""
 	if _, ok := sel["jellyfin"]; ok {
 		if spec.AdminPass == "" {
-			results = append(results, Result{
+			results = emit(results, Result{
 				Connection: "Jellyfin setup", Outcome: OutcomeManual,
 				Detail:      "no admin credential provided — finish Jellyfin's wizard in its web UI",
 				FallbackURL: spec.Access("jellyfin")})
 		} else {
+			stage("running Jellyfin's setup wizard")
 			jfResults, jfKey := EnsureJellyfin(ctx, JellyfinTarget{
 				URL: spec.Access("jellyfin"), AdminUser: spec.AdminUser, AdminPass: spec.AdminPass,
 				HWAccel: spec.HWAccel, TranscodePath: transcodePathFor(spec.HWAccel),
@@ -246,7 +271,7 @@ func Orchestrate(ctx context.Context, spec Spec) []Result {
 					{Name: "Music", CollectionType: "music", Path: "/media/music"},
 				},
 			})
-			results = append(results, jfResults...)
+			results = emit(results, jfResults...)
 			jellyfinKey = jfKey
 		}
 	}
@@ -266,11 +291,11 @@ func Orchestrate(ctx context.Context, spec Spec) []Result {
 		}
 		app := sel[id]
 		if spec.Adopted[id] {
-			results = append(results, Result{Connection: app.Name + " setup", Outcome: OutcomeExisted,
+			results = emit(results, Result{Connection: app.Name + " setup", Outcome: OutcomeExisted,
 				Detail: "left as configured"})
 			continue
 		}
-		results = append(results, Result{Connection: app.Name + " setup", Outcome: OutcomeManual,
+		results = emit(results, Result{Connection: app.Name + " setup", Outcome: OutcomeManual,
 			Detail: note, FallbackURL: spec.Access(id)})
 	}
 
@@ -284,7 +309,7 @@ func Orchestrate(ctx context.Context, spec Spec) []Result {
 		if _, r := sel["radarr"]; r && keys["radarr"] != "" {
 			radarr = &ArrConn{Host: "radarr", Port: 7878, APIKey: keys["radarr"]}
 		}
-		results = append(results, WriteTailConfig(
+		results = emit(results, WriteTailConfig(
 			filepath.Join(spec.AppdataRoot, "bazarr", "config", "config.yaml"),
 			BazarrConfig(spec.BazarrAPIKey, sonarr, radarr), 0o600, spec.PUID, spec.PGID, "Bazarr ← sonarr/radarr connections"))
 	}
@@ -309,7 +334,7 @@ func Orchestrate(ctx context.Context, spec Spec) []Result {
 				WidgetPort: widgetPort, WidgetHost: widgetHost,
 			})
 		}
-		results = append(results, WriteTailConfig(
+		results = emit(results, WriteTailConfig(
 			filepath.Join(spec.AppdataRoot, "homepage", "services.yaml"),
 			HomepageServices(BuildHomepageServices(inputs)), 0o600, spec.PUID, spec.PGID, "Homepage ← service widgets"))
 	}
@@ -317,7 +342,8 @@ func Orchestrate(ctx context.Context, spec Spec) []Result {
 	// 6.5 TRaSH quality sync (issue #60): a CONVERGENT step — Recyclarr
 	// pushes the guide profiles into the arrs every pass; ↻ is its verdict.
 	if spec.TRaSH != nil && spec.RunRecyclarr != nil {
-		results = append(results, runTRaSH(spec, keys)...)
+		stage("syncing TRaSH quality profiles via Recyclarr (takes a minute or so)")
+		results = emit(results, runTRaSH(spec, keys)...)
 	}
 
 	// 6.6 TRaSH naming + media management (issue #105), riding the same
@@ -327,13 +353,13 @@ func Orchestrate(ctx context.Context, spec Spec) []Result {
 	if spec.TRaSH != nil {
 		if a, ok := sel["sonarr"]; ok && keys["sonarr"] != "" {
 			c := arrClient("sonarr")
-			results = append(results,
+			results = emit(results,
 				EnsureSonarrNaming(ctx, c, settingsAdopted("sonarr")),
 				EnsureMediaManagement(ctx, c, a.APIBase, a.Name, settingsAdopted("sonarr")))
 		}
 		if a, ok := sel["radarr"]; ok && keys["radarr"] != "" {
 			c := arrClient("radarr")
-			results = append(results,
+			results = emit(results,
 				EnsureRadarrNaming(ctx, c, settingsAdopted("radarr")),
 				EnsureMediaManagement(ctx, c, a.APIBase, a.Name, settingsAdopted("radarr")))
 		}
@@ -370,7 +396,8 @@ func Orchestrate(ctx context.Context, spec Spec) []Result {
 					ProfileID: id, ProfileName: name, RootFolder: "/data/media/" + a.MediaDir}
 			}
 		}
-		results = append(results, EnsureSeerr(ctx, t)...)
+		stage("setting up Seerr")
+		results = emit(results, EnsureSeerr(ctx, t)...)
 	}
 
 	return results
@@ -386,13 +413,20 @@ func OrchestrateTail(ctx context.Context, spec Spec) []Result {
 	}
 	var results []Result
 	if sel["bazarr"] && spec.BazarrAPIKey != "" {
+		if spec.Stage != nil {
+			spec.Stage("finishing Bazarr (its first boot can take a moment)")
+		}
 		// Readiness means the CONTAINER runs; Bazarr's web server takes a
 		// while longer on first boot (migrations, config parse) — caught
 		// live in CI as connection-refused. Patience, not failure.
 		c := NewClient(spec.Access("bazarr"), spec.BazarrAPIKey, "X-API-KEY").
 			WithRetry(6, 5*time.Second)
 		adopted := spec.Adopted["bazarr"] && !spec.Owned["bazarr"]
-		results = append(results, EnsureBazarrLanguages(ctx, c, adopted))
+		r := EnsureBazarrLanguages(ctx, c, adopted)
+		if spec.Progress != nil {
+			spec.Progress(r)
+		}
+		results = append(results, r)
 	}
 	return results
 }

@@ -16,6 +16,9 @@ type Runner func(args ...string) (string, error)
 type Docker struct {
 	run   Runner
 	runIn RunnerIn
+	// pull, when non-nil, replaces the real `docker pull` in PullProgress —
+	// a test seam (the parser itself is tested directly).
+	pull func(ref string, onProgress func(done, total int)) error
 }
 
 // New returns a Docker that shells out to the real CLI.

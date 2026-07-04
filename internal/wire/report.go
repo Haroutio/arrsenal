@@ -15,6 +15,22 @@ var outcomeSymbol = map[Outcome]string{
 	OutcomeFailed:  "✗",
 }
 
+// RenderLine formats one result the way the report does, unpadded — the
+// live narration a wiring pass emits as each connection lands (issue
+// #115). The aligned report at the end stays the receipt.
+func RenderLine(r Result) string {
+	line := fmt.Sprintf("  %s %s", outcomeSymbol[r.Outcome], r.Connection)
+	switch {
+	case r.Detail != "" && r.FallbackURL != "":
+		line += " — " + r.Detail + " → " + r.FallbackURL
+	case r.Detail != "":
+		line += " — " + r.Detail
+	case r.FallbackURL != "":
+		line += " → " + r.FallbackURL
+	}
+	return line
+}
+
 // RenderReport is the closing table: one line per attempted connection,
 // aligned, with the reason and the manual fallback where one exists, and a
 // one-line summary. Partial failure is not rollback — the report tells the

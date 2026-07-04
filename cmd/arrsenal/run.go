@@ -554,10 +554,29 @@ func pipeline(s *state.State, o options) error {
 		return nil
 	}
 
+	// Missing images are pulled up front, one Arrsenal-drawn progress line
+	// per image (issue #115) — compose's own noise never reaches the
+	// terminal, and re-runs stay pull-free (only MISSING images download;
+	// deliberate updates remain `arrsenal update`'s job).
+	if images, imgErr := docker.ComposeImages(o.artifactsDir); imgErr == nil {
+		var missing []string
+		for _, ref := range images {
+			if !docker.ImagePresent(ref) {
+				missing = append(missing, ref)
+			}
+		}
+		if len(missing) > 0 {
+			fmt.Printf("downloading %d images — on a first install this is the big wait:\n", len(missing))
+			if err := pullImages(docker, missing); err != nil {
+				return err
+			}
+		}
+	}
+
 	// Boot phases (DESIGN §7.5): core apps first — their keys and APIs feed
 	// the wiring — then tail apps once their configs exist on disk.
 	core, tail := partitionByPhase(s)
-	fmt.Println("bringing the core apps up…")
+	fmt.Println("starting the core apps…")
 	if err := docker.Up(o.artifactsDir, core...); err != nil {
 		return err
 	}
@@ -567,11 +586,13 @@ func pipeline(s *state.State, o options) error {
 	var wiring []wire.Result
 	if !o.skipWiring {
 		fmt.Println("wiring the stack together…")
-		wiring = wire.Orchestrate(context.Background(), buildSpec(s, o, conflictsAdopted(conflicts)))
+		spec := buildSpec(s, o, conflictsAdopted(conflicts))
+		spec.Progress, spec.Stage = wireProgress, wireStage
+		wiring = wire.Orchestrate(context.Background(), spec)
 	}
 
 	if len(tail) > 0 {
-		fmt.Println("bringing the remaining apps up…")
+		fmt.Println("starting the remaining apps…")
 	}
 	if err := docker.Up(o.artifactsDir); err != nil { // full up reconciles
 		return err
@@ -582,8 +603,10 @@ func pipeline(s *state.State, o options) error {
 			// The tail pass: wiring that needs the tail apps RUNNING —
 			// Orchestrate ran before they booted (their configs are its
 			// output). Results join the same report.
+			tailSpec := buildSpec(s, o, conflictsAdopted(conflicts))
+			tailSpec.Progress, tailSpec.Stage = wireProgress, wireStage
 			wiring = append(wiring,
-				wire.OrchestrateTail(context.Background(), buildSpec(s, o, conflictsAdopted(conflicts)))...)
+				wire.OrchestrateTail(context.Background(), tailSpec)...)
 		}
 	}
 
