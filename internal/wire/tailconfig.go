@@ -23,9 +23,16 @@ type ArrConn struct {
 // BazarrConfig renders a minimal config.yaml. Only the sections for selected
 // arrs are written; Bazarr fills every other default on first boot. Sonarr
 // handles TV subtitles, Radarr movies — Lidarr is not a Bazarr concern.
-func BazarrConfig(sonarr, radarr *ArrConn) []byte {
+// The apiKey is OUR generated key (a state secret): Bazarr has no readable
+// key before first boot, and the language pre-seed (issue #107) needs API
+// access right after — so the key travels in, not out.
+func BazarrConfig(apiKey string, sonarr, radarr *ArrConn) []byte {
 	var b strings.Builder
 	b.WriteString("---\n")
+	if apiKey != "" {
+		b.WriteString("auth:\n")
+		fmt.Fprintf(&b, "  apikey: %s\n", apiKey)
+	}
 	b.WriteString("general:\n")
 	fmt.Fprintf(&b, "  use_sonarr: %t\n", sonarr != nil)
 	fmt.Fprintf(&b, "  use_radarr: %t\n", radarr != nil)

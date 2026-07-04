@@ -13,6 +13,7 @@ import (
 
 func TestBazarrConfigBothArrs(t *testing.T) {
 	got := BazarrConfig(
+		"bazarr-key-SECRET",
 		&ArrConn{Host: "sonarr", Port: 8989, APIKey: "sk"},
 		&ArrConn{Host: "radarr", Port: 7878, APIKey: "rk"},
 	)
@@ -32,10 +33,16 @@ func TestBazarrConfigBothArrs(t *testing.T) {
 	if son["apikey"] != "sk" {
 		t.Fatalf("sonarr key missing: %v", son)
 	}
+	// The pre-seeded key rides in the auth section (issue #107) — the
+	// language pass authenticates with it after Bazarr boots.
+	auth := cfg["auth"].(map[string]any)
+	if auth["apikey"] != "bazarr-key-SECRET" {
+		t.Fatalf("auth section: %v", auth)
+	}
 }
 
 func TestBazarrConfigSonarrOnly(t *testing.T) {
-	got := BazarrConfig(&ArrConn{Host: "sonarr", Port: 8989, APIKey: "sk"}, nil)
+	got := BazarrConfig("", &ArrConn{Host: "sonarr", Port: 8989, APIKey: "sk"}, nil)
 	var cfg map[string]any
 	if err := yaml.Unmarshal(got, &cfg); err != nil {
 		t.Fatal(err)

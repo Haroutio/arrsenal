@@ -35,7 +35,11 @@ type Spec struct {
 	AdminUser string // may be empty → auth + Jellyfin wizard become manual steps
 	AdminPass string
 	QBitPass  string // the pre-seeded WebUI password (state secret)
-	HWAccel   string // Jellyfin encoder: nvenc/qsv/vaapi/"" per detected GPU
+	// BazarrAPIKey is the pre-seeded key written into Bazarr's config.yaml
+	// (state secret); OrchestrateTail authenticates with it once Bazarr is
+	// up (issue #107).
+	BazarrAPIKey string
+	HWAccel      string // Jellyfin encoder: nvenc/qsv/vaapi/"" per detected GPU
 
 	// Access returns the host-side URL this process reaches app id on.
 	Access func(id string) string
@@ -114,6 +118,35 @@ func Orchestrate(ctx context.Context, spec Spec) []Result {
 		sabReady = !Failed(steps)
 	}
 	_, qbitSelected := sel["qbittorrent"]
+
+	// 2.7 qBittorrent categories (issue #107): the arrs tag downloads with a
+	// category per PVR; registering each with a save path under
+	// /data/torrents keeps torrents on the shared tree so imports hardlink
+	// from the very first grab.
+	if qbitSelected && spec.QBitPass != "" {
+		qc, err := NewQBitSession(ctx, spec.Access("qbittorrent"), "admin", spec.QBitPass)
+		if err != nil {
+			// An adopted qBittorrent has its own credentials, not our
+			// pre-seed — a rejected login there is the adoption contract
+			// working, not a failure.
+			if spec.Adopted["qbittorrent"] {
+				results = append(results, Result{
+					Connection: "qBittorrent ← category save paths", Outcome: OutcomeExisted,
+					Detail: "adopted qBittorrent has its own credentials — categories left as configured"})
+			} else {
+				results = append(results, Result{
+					Connection: "qBittorrent ← category save paths", Outcome: OutcomeFailed,
+					Detail: err.Error()})
+			}
+		} else {
+			for _, a := range spec.Apps {
+				if a.Role == registry.RolePVR {
+					results = append(results,
+						EnsureQBitCategory(ctx, qc, a.MediaDir, "/data/torrents/"+a.MediaDir))
+				}
+			}
+		}
+	}
 
 	// 3. Auth: the single admin credential on every arr-family app that is
 	// fresh (adopted auth is the user's).
@@ -236,7 +269,7 @@ func Orchestrate(ctx context.Context, spec Spec) []Result {
 		}
 		results = append(results, WriteTailConfig(
 			filepath.Join(spec.AppdataRoot, "bazarr", "config", "config.yaml"),
-			BazarrConfig(sonarr, radarr), 0o600, spec.PUID, spec.PGID, "Bazarr ← sonarr/radarr connections"))
+			BazarrConfig(spec.BazarrAPIKey, sonarr, radarr), 0o600, spec.PUID, spec.PGID, "Bazarr ← sonarr/radarr connections"))
 	}
 	if _, ok := sel["homepage"]; ok {
 		var inputs []HomepageInput
@@ -323,6 +356,22 @@ func Orchestrate(ctx context.Context, spec Spec) []Result {
 		results = append(results, EnsureSeerr(ctx, t)...)
 	}
 
+	return results
+}
+
+// OrchestrateTail is the small second pass for wiring that needs the TAIL
+// apps running — Orchestrate runs before they boot (their configs are its
+// output). Today that is one lane: Bazarr's language defaults (issue #107).
+func OrchestrateTail(ctx context.Context, spec Spec) []Result {
+	sel := map[string]bool{}
+	for _, a := range spec.Apps {
+		sel[a.ID] = true
+	}
+	var results []Result
+	if sel["bazarr"] && spec.BazarrAPIKey != "" {
+		c := NewClient(spec.Access("bazarr"), spec.BazarrAPIKey, "X-API-KEY")
+		results = append(results, EnsureBazarrLanguages(ctx, c, spec.Adopted["bazarr"]))
+	}
 	return results
 }
 

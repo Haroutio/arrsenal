@@ -51,6 +51,12 @@ type Secrets struct {
 	// Arrsenal generates one, persists it, and pre-seeds it.
 	QBittorrentPassword string `yaml:"qbittorrent_webui_password,omitempty"`
 
+	// BazarrAPIKey is OUR generated key, pre-seeded into Bazarr's
+	// config.yaml before first boot: Bazarr mints no readable key of its
+	// own beforehand, and the language pre-seed (issue #107) needs API
+	// access right after the tail apps start.
+	BazarrAPIKey string `yaml:"bazarr_apikey,omitempty"`
+
 	// WireguardPrivateKey authenticates the VPN tunnel (issue #27). It is
 	// rendered into gluetun's own 0600 env-file — never into the
 	// world-readable compose artifacts.
