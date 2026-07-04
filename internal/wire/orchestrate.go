@@ -2,6 +2,7 @@ package wire
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -17,8 +18,13 @@ import (
 // host side, localhost:<published port>); wire URLs are how apps reach EACH
 // OTHER (container-name:container-port on the bridge, DESIGN.md §6).
 type Spec struct {
-	Apps        []registry.App  // selected, registry order
-	Adopted     map[string]bool // app ID → appdata predated this run
+	Apps    []registry.App  // selected, registry order
+	Adopted map[string]bool // app ID → appdata predated this run
+	// Owned marks apps whose appdata Arrsenal itself created on an earlier
+	// run (the state's ownership ledger). The settings lanes treat an app
+	// as adopted only when it predates the run AND is not ours — otherwise
+	// every re-run would strand a lane that failed once (audit finding).
+	Owned       map[string]bool
 	AppdataRoot string
 	// Usenet is the news server to register in SABnzbd (nil = none given).
 	// The single setting without which the whole stack downloads nothing.
@@ -76,6 +82,10 @@ func Orchestrate(ctx context.Context, spec Spec) []Result {
 	}
 	var results []Result
 
+	// settingsAdopted is the gate the settings lanes use: hands-off only
+	// for apps that are genuinely someone else's.
+	settingsAdopted := func(id string) bool { return spec.Adopted[id] && !spec.Owned[id] }
+
 	// 1. Keys: read what every key-bearing selected app generated.
 	keys := map[string]string{}
 	for _, a := range spec.Apps {
@@ -111,11 +121,16 @@ func Orchestrate(ctx context.Context, spec Spec) []Result {
 				steps = append(steps, EnsureSABCategory(ctx, sab, a.MediaDir))
 			}
 		}
-		if spec.Usenet != nil {
-			steps = append(steps, EnsureSABServer(ctx, sab, *spec.Usenet))
-		}
+		// sabReady gates the arrs' download-client wiring and is decided by
+		// the plumbing steps ONLY — a failed news-server registration must
+		// not silently suppress every Sonarr→SABnzbd connection (audit
+		// finding): SAB without a working server is still a valid download
+		// client the user finishes later.
 		results = append(results, steps...)
 		sabReady = !Failed(steps)
+		if spec.Usenet != nil {
+			results = append(results, EnsureSABServer(ctx, sab, *spec.Usenet))
+		}
 	}
 	_, qbitSelected := sel["qbittorrent"]
 
@@ -127,9 +142,11 @@ func Orchestrate(ctx context.Context, spec Spec) []Result {
 		qc, err := NewQBitSession(ctx, spec.Access("qbittorrent"), "admin", spec.QBitPass)
 		if err != nil {
 			// An adopted qBittorrent has its own credentials, not our
-			// pre-seed — a rejected login there is the adoption contract
-			// working, not a failure.
-			if spec.Adopted["qbittorrent"] {
+			// pre-seed — a REJECTED LOGIN there is the adoption contract
+			// working, not a failure. A transport error (down, timeout) is
+			// a failure on adopted and fresh alike; calling it "own
+			// credentials" would hide a dead container (audit finding).
+			if settingsAdopted("qbittorrent") && errors.Is(err, ErrQBitCredentials) {
 				results = append(results, Result{
 					Connection: "qBittorrent ← category save paths", Outcome: OutcomeExisted,
 					Detail: "adopted qBittorrent has its own credentials — categories left as configured"})
@@ -311,14 +328,14 @@ func Orchestrate(ctx context.Context, spec Spec) []Result {
 		if a, ok := sel["sonarr"]; ok && keys["sonarr"] != "" {
 			c := arrClient("sonarr")
 			results = append(results,
-				EnsureSonarrNaming(ctx, c, spec.Adopted["sonarr"]),
-				EnsureMediaManagement(ctx, c, a.APIBase, a.Name, spec.Adopted["sonarr"]))
+				EnsureSonarrNaming(ctx, c, settingsAdopted("sonarr")),
+				EnsureMediaManagement(ctx, c, a.APIBase, a.Name, settingsAdopted("sonarr")))
 		}
 		if a, ok := sel["radarr"]; ok && keys["radarr"] != "" {
 			c := arrClient("radarr")
 			results = append(results,
-				EnsureRadarrNaming(ctx, c, spec.Adopted["radarr"]),
-				EnsureMediaManagement(ctx, c, a.APIBase, a.Name, spec.Adopted["radarr"]))
+				EnsureRadarrNaming(ctx, c, settingsAdopted("radarr")),
+				EnsureMediaManagement(ctx, c, a.APIBase, a.Name, settingsAdopted("radarr")))
 		}
 	}
 
@@ -374,7 +391,8 @@ func OrchestrateTail(ctx context.Context, spec Spec) []Result {
 		// live in CI as connection-refused. Patience, not failure.
 		c := NewClient(spec.Access("bazarr"), spec.BazarrAPIKey, "X-API-KEY").
 			WithRetry(6, 5*time.Second)
-		results = append(results, EnsureBazarrLanguages(ctx, c, spec.Adopted["bazarr"]))
+		adopted := spec.Adopted["bazarr"] && !spec.Owned["bazarr"]
+		results = append(results, EnsureBazarrLanguages(ctx, c, adopted))
 	}
 	return results
 }

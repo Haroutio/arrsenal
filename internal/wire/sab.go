@@ -176,11 +176,14 @@ var UsenetPresets = map[string]UsenetProvider{
 // the installer over a working config).
 func EnsureSABServer(ctx context.Context, sab *Client, p UsenetProvider) Result {
 	conn := fmt.Sprintf("SABnzbd ← usenet provider (%s)", p.Host)
-	sab.WithRedaction(p.Password)
+	// The username is a credential too (often an email) and rides the same
+	// query strings as the password.
+	sab.WithRedaction(p.Password, p.Username)
 
 	var cfg struct {
 		Config struct {
 			Servers []struct {
+				Name string `json:"name"`
 				Host string `json:"host"`
 			} `json:"servers"`
 		} `json:"config"`
@@ -193,6 +196,14 @@ func EnsureSABServer(ctx context.Context, sab *Client, p UsenetProvider) Result 
 		if strings.EqualFold(s.Host, p.Host) {
 			return Result{Connection: conn, Outcome: OutcomeExisted,
 				Detail: "server already configured — left untouched"}
+		}
+		// SAB's set_config is keyed by the server NAME: posting an existing
+		// name EDITS that server. A name match must therefore back off too,
+		// or a same-name-different-host entry would be silently replaced
+		// (audit finding).
+		if strings.EqualFold(s.Name, p.Name) {
+			return Result{Connection: conn, Outcome: OutcomeExisted,
+				Detail: fmt.Sprintf("a server named %q already exists — left untouched", p.Name)}
 		}
 	}
 

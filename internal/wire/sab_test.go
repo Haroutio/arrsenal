@@ -174,15 +174,15 @@ func TestSABKeyNeverLeaksFromQueryString(t *testing.T) {
 // fakeSABServers models the servers section: a get that lists what exists,
 // a set that records the exact registration query, and the test_server
 // endpoint answering testResult/testMessage.
-func fakeSABServers(t *testing.T, existingHost string, testResult bool, testMessage string, sets *atomic.Int32, lastQuery *string) *httptest.Server {
+func fakeSABServers(t *testing.T, existingName, existingHost string, testResult bool, testMessage string, sets *atomic.Int32, lastQuery *string) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
 		switch {
 		case q.Get("mode") == "get_config":
 			servers := `[]`
-			if existingHost != "" {
-				servers = `[{"host":"` + existingHost + `"}]`
+			if existingHost != "" || existingName != "" {
+				servers = `[{"name":"` + existingName + `","host":"` + existingHost + `"}]`
 			}
 			_, _ = w.Write([]byte(`{"config":{"servers":` + servers + `}}`))
 		case q.Get("mode") == "set_config":
@@ -204,7 +204,7 @@ func fakeSABServers(t *testing.T, existingHost string, testResult bool, testMess
 func TestEnsureSABServerRegistersProvider(t *testing.T) {
 	var sets atomic.Int32
 	var lastQuery string
-	srv := fakeSABServers(t, "", true, "Connection Successful!", &sets, &lastQuery)
+	srv := fakeSABServers(t, "", "", true, "Connection Successful!", &sets, &lastQuery)
 	defer srv.Close()
 
 	p := UsenetPresets["newshosting"]
@@ -231,7 +231,7 @@ func TestEnsureSABServerBadCredentialsAreManualNotWired(t *testing.T) {
 	// connection test fails. The report must say so instead of claiming ✓.
 	var sets atomic.Int32
 	var lastQuery string
-	srv := fakeSABServers(t, "", false, "Authentication failed, check username/password.", &sets, &lastQuery)
+	srv := fakeSABServers(t, "", "", false, "Authentication failed, check username/password.", &sets, &lastQuery)
 	defer srv.Close()
 
 	p := UsenetPresets["newshosting"]
@@ -253,7 +253,7 @@ func TestEnsureSABServerBadCredentialsAreManualNotWired(t *testing.T) {
 func TestEnsureSABServerNeverTouchesExisting(t *testing.T) {
 	var sets atomic.Int32
 	var lastQuery string
-	srv := fakeSABServers(t, "news.newshosting.com", true, "Connection Successful!", &sets, &lastQuery)
+	srv := fakeSABServers(t, "Newshosting", "news.newshosting.com", true, "Connection Successful!", &sets, &lastQuery)
 	defer srv.Close()
 
 	p := UsenetPresets["newshosting"]
@@ -263,6 +263,58 @@ func TestEnsureSABServerNeverTouchesExisting(t *testing.T) {
 	r := EnsureSABServer(context.Background(), c, p)
 	if r.Outcome != OutcomeExisted || sets.Load() != 0 {
 		t.Fatalf("existing server must be untouched (even the credentials): %+v sets=%d", r, sets.Load())
+	}
+}
+
+func TestEnsureSABServerNameCollisionBacksOff(t *testing.T) {
+	// SAB's set_config is keyed by server NAME: posting an existing name
+	// EDITS that server. A same-name-different-host entry (a user's own
+	// "Eweka" on an alternate endpoint, say) must never be replaced.
+	var sets atomic.Int32
+	var lastQuery string
+	srv := fakeSABServers(t, "Eweka", "newsreader.eweka.nl", true, "", &sets, &lastQuery)
+	defer srv.Close()
+
+	p := UsenetPresets["eweka"] // preset host news.eweka.nl — no host match
+	p.Username, p.Password = "u", "p"
+	c := NewSABClient(srv.URL, "sab-key-SECRET")
+	c.backoff = time.Millisecond
+	r := EnsureSABServer(context.Background(), c, p)
+	if r.Outcome != OutcomeExisted || sets.Load() != 0 {
+		t.Fatalf("name collision must back off, not edit: %+v sets=%d", r, sets.Load())
+	}
+	if !strings.Contains(r.Detail, "Eweka") {
+		t.Fatalf("the detail should name the collision: %+v", r)
+	}
+}
+
+func TestRedactionCoversEncodedForms(t *testing.T) {
+	// A password with URL-reserved characters rides query strings
+	// percent-encoded; the raw-string replace alone never matches it
+	// (audit finding). The hostile server echoes the full request URL.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("mode") == "get_config" {
+			_, _ = w.Write([]byte(`{"config":{"servers":[]}}`))
+			return
+		}
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte("boom: " + r.URL.String()))
+	}))
+	defer srv.Close()
+
+	p := UsenetPresets["newshosting"]
+	p.Username, p.Password = "user@example.com", "p@ss word!"
+	c := NewSABClient(srv.URL, "sab-key-SECRET")
+	c.backoff = time.Millisecond
+	r := EnsureSABServer(context.Background(), c, p)
+	if r.Outcome != OutcomeFailed {
+		t.Fatalf("want failure, got %+v", r)
+	}
+	for _, leak := range []string{"p@ss word!", "p%40ss+word%21", "p%40ss%20word%21",
+		"user@example.com", "user%40example.com"} {
+		if strings.Contains(r.Detail, leak) {
+			t.Fatalf("credential leaked as %q in:\n%s", leak, r.Detail)
+		}
 	}
 }
 

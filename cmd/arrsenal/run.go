@@ -48,6 +48,9 @@ func run(o options) error {
 	} else if err := interactiveFill(s, &o); err != nil {
 		return err
 	}
+	if err := validateSourceFlags(o); err != nil {
+		return err
+	}
 
 	return pipeline(s, o)
 }
@@ -224,7 +227,7 @@ func interactiveFill(s *state.State, o *options) error {
 				t.Source = "remux"
 			}
 			t.Anime = confirm("Also apply the anime profiles?", false)
-			fmt.Println("note: this creates/updates the TRaSH-named quality profiles in your arrs on every run — existing custom profiles are untouched; fresh installs also get the guides' naming scheme")
+			fmt.Println("note: this creates/updates the TRaSH-named quality profiles in your arrs on every run — existing custom profiles are untouched; fresh installs also get the guides' naming scheme and file-management defaults (propers scored by custom formats, video analysis on)")
 			s.TRaSH = t
 		}
 	}
@@ -248,9 +251,16 @@ func interactiveFill(s *state.State, o *options) error {
 				}
 				fmt.Print("Provider password: ")
 				if pw, err := term.ReadPassword(int(os.Stdin.Fd())); err == nil {
-					o.usenetPass = strings.TrimSpace(string(pw))
+					o.usenetPass = string(pw)
 				}
 				fmt.Println()
+				if o.usenetUser == "" || o.usenetPass == "" {
+					// Never let a half-entered provider vanish silently — say
+					// so now, while the user is still at the keyboard.
+					fmt.Println("incomplete credentials — skipping the usenet provider (re-run arrsenal, or use SAB's web UI)")
+					o.usenetProvider, o.usenetUser, o.usenetPass = "", "", ""
+				}
+				fmt.Println("note: the preset's port and connection count apply; --usenet-port / --usenet-connections override them")
 			}
 		}
 	}
@@ -258,7 +268,7 @@ func interactiveFill(s *state.State, o *options) error {
 	// 5.8 Indexers (issue #104): almost every usenet indexer is generic
 	// Newznab — URL plus API key — and Prowlarr propagates them to every
 	// arr. Prowlarr validates on save, so typos surface in the report.
-	if selectedID(s, "prowlarr") && o.indexerName == "" {
+	if selectedID(s, "prowlarr") && len(o.indexerNames) == 0 {
 		for confirm("Add a usenet indexer to Prowlarr now (most are Newznab: URL + API key)?", false) {
 			var ix wire.NewznabIndexer
 			fmt.Print("Indexer name: ")
@@ -362,6 +372,26 @@ func pipeline(s *state.State, o options) error {
 	conflicts, err := preflight.ScanConflicts(s, preflight.DefaultDeps(docker.Containers))
 	if err != nil {
 		return err
+	}
+
+	// Ownership ledger (audit finding): record which apps' appdata Arrsenal
+	// itself is about to create. Per-run adoption ("appdata predates the
+	// run") mislabels our own installs as adopted on every re-run, so a
+	// settings lane that failed once could never converge. Owned apps stay
+	// ours across runs; states from before this field simply keep the old
+	// conservative behavior.
+	adoptedNow := conflictsAdopted(conflicts)
+	ownedChanged := false
+	for _, id := range s.Apps {
+		if !adoptedNow[id] && !s.IsOwned(id) {
+			s.Owned = append(s.Owned, id)
+			ownedChanged = true
+		}
+	}
+	if ownedChanged {
+		if err := s.Save(o.statePath); err != nil {
+			return err
+		}
 	}
 	var blocking []preflight.Conflict
 	for _, c := range conflicts {
@@ -477,6 +507,19 @@ func pipeline(s *state.State, o options) error {
 		if err := os.WriteFile(claimPath, []byte(content), 0o600); err != nil {
 			return fmt.Errorf("writing plex claim file: %w", err)
 		}
+	}
+
+	// The scheduled recyclarr service mounts ${APPDATA}/recyclarr and runs
+	// as PUID — if compose creates that bind-source first, it is root-owned
+	// and the container cannot write its own logs (audit finding). Create
+	// and hand it over BEFORE anything starts; the wiring pass writes the
+	// config into it minutes later.
+	if s.TRaSH.Enabled {
+		dir := filepath.Join(s.AppdataRoot, "recyclarr")
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return err
+		}
+		chownTree(dir, s.PUID, s.PGID)
 	}
 
 	// gluetun's credentials file is Arrsenal-owned (derived purely from
@@ -643,9 +686,14 @@ func buildSpec(s *state.State, o options, adopted map[string]bool) wire.Spec {
 		}
 	}
 
+	owned := map[string]bool{}
+	for _, id := range s.Owned {
+		owned[id] = true
+	}
 	return wire.Spec{
 		Apps:        apps,
 		Adopted:     adopted,
+		Owned:       owned,
 		AppdataRoot: s.AppdataRoot,
 		PUID:        s.PUID, PGID: s.PGID,
 		Usenet:   resolveUsenetProvider(o),
@@ -698,18 +746,44 @@ func resolveUsenetProvider(o options) *wire.UsenetProvider {
 	if o.usenetConnections != 0 {
 		p.Connections = o.usenetConnections
 	}
-	p.Username, p.Password = o.usenetUser, o.usenetPass
+	// Trim the username (a stray space in a copy-pasted flag value is
+	// noise); the password is taken exactly as given in both entry paths.
+	p.Username, p.Password = strings.TrimSpace(o.usenetUser), o.usenetPass
 	return &p
 }
 
-// resolveIndexers merges the flag-supplied indexer (if complete) with any
-// entered interactively.
+// resolveIndexers merges the flag-supplied indexers (repeatable triples,
+// zipped in order) with any entered interactively. validateSourceFlags has
+// already rejected mismatched triple counts.
 func resolveIndexers(o options) []wire.NewznabIndexer {
 	out := append([]wire.NewznabIndexer{}, o.indexers...)
-	if o.indexerName != "" && o.indexerURL != "" && o.indexerKey != "" {
-		out = append(out, wire.NewznabIndexer{Name: o.indexerName, URL: o.indexerURL, APIKey: o.indexerKey})
+	for i := range o.indexerNames {
+		if i < len(o.indexerURLs) && i < len(o.indexerKeys) {
+			out = append(out, wire.NewznabIndexer{
+				Name: o.indexerNames[i], URL: o.indexerURLs[i], APIKey: o.indexerKeys[i]})
+		}
 	}
 	return out
+}
+
+// validateSourceFlags rejects half-specified download sources loudly. A
+// silently-dropped provider or indexer leaves the user believing their
+// downloads work (audit finding) — the one thing this tool must never do.
+func validateSourceFlags(o options) error {
+	if o.usenetProvider != "" {
+		if o.usenetUser == "" || o.usenetPass == "" {
+			return errors.New("--usenet-provider needs --usenet-user and --usenet-pass")
+		}
+		key := strings.ToLower(strings.TrimSpace(o.usenetProvider))
+		if _, ok := wire.UsenetPresets[key]; !ok && !strings.Contains(key, ".") {
+			return fmt.Errorf("unknown usenet preset %q — pick one of newshosting, eweka, usenetserver, frugal, easynews, or pass your provider's full hostname", o.usenetProvider)
+		}
+	}
+	if len(o.indexerNames) != len(o.indexerURLs) || len(o.indexerNames) != len(o.indexerKeys) {
+		return fmt.Errorf("indexer flags must come in complete triples: %d × --indexer-name, %d × --indexer-url, %d × --indexer-key",
+			len(o.indexerNames), len(o.indexerURLs), len(o.indexerKeys))
+	}
+	return nil
 }
 
 // chownTree hands a directory tree to the container user (POSIX only; the

@@ -207,12 +207,39 @@ func (c *Client) do(ctx context.Context, method, path string, body, out any) err
 
 // redactAll strips every registered secret from text destined for humans.
 // Belt and braces: response bodies should never echo secrets, but "should"
-// is not a guarantee.
+// is not a guarantee. Each secret is scrubbed in every encoding it can
+// reach an error in: raw, percent-encoded (query strings — a password with
+// an @ or a space rides URLs as p%40ss+word and a raw-string replace never
+// matches; audit finding), and JSON-escaped (server echoes).
 func (c *Client) redactAll(s string) string {
 	for _, secret := range append([]string{c.key}, c.redactions...) {
-		if secret != "" {
-			s = strings.ReplaceAll(s, secret, "[redacted]")
+		if secret == "" {
+			continue
+		}
+		for _, form := range redactionForms(secret) {
+			s = strings.ReplaceAll(s, form, "[redacted]")
 		}
 	}
 	return s
+}
+
+// redactionForms returns the encodings a secret can appear in, most
+// specific first. Encoded forms are included only when they differ from
+// the raw secret (most keys are plain hex and encode to themselves).
+func redactionForms(secret string) []string {
+	forms := []string{secret}
+	if q := url.QueryEscape(secret); q != secret {
+		forms = append(forms, q)
+	}
+	// url.Values.Encode uses QueryEscape (space→+); path contexts use
+	// PathEscape (space→%20). Cover both.
+	if p := url.PathEscape(secret); p != secret && p != url.QueryEscape(secret) {
+		forms = append(forms, p)
+	}
+	if j, err := json.Marshal(secret); err == nil {
+		if js := string(j[1 : len(j)-1]); js != secret { // strip the quotes
+			forms = append(forms, js)
+		}
+	}
+	return forms
 }

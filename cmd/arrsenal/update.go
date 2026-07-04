@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Haroutio/arrsenal/internal/dockerx"
+	"github.com/Haroutio/arrsenal/internal/quality"
 	"github.com/Haroutio/arrsenal/internal/state"
 )
 
@@ -39,9 +40,16 @@ func runUpdate(o options) error {
 			fmt.Println(" ", line)
 		}
 	}
-	// Recyclarr needs no special pull: when TRaSH is enabled it is a compose
-	// service (issue #106), so the pull above covers it — and the wiring
-	// one-shot runs the same pinned image.
+	// When TRaSH is enabled recyclarr is a compose service (issue #106) and
+	// the pull above covers it — but only in compose files generated since
+	// then. Artifacts from an older arrsenal predate the service, so the
+	// explicit pull stays for them and for the wiring one-shot (audit
+	// finding).
+	if s.TRaSH.Enabled {
+		if err := docker.PullImage(quality.Image); err != nil {
+			return err
+		}
+	}
 
 	fmt.Println("reconciling containers…")
 	if err := docker.Up(o.artifactsDir); err != nil {

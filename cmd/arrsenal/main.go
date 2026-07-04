@@ -73,11 +73,13 @@ type options struct {
 	usenetPass        string
 	usenetPort        int
 	usenetConnections int
-	indexerName       string
-	indexerURL        string
-	indexerKey        string
-	// indexers collects interactively-entered indexers (no flag; the flag
-	// trio above feeds one more via resolveIndexers).
+	// The indexer flags are repeatable: pass --indexer-name/--indexer-url/
+	// --indexer-key once per indexer, in matching order.
+	indexerNames []string
+	indexerURLs  []string
+	indexerKeys  []string
+	// indexers collects interactively-entered indexers; the flag triples
+	// above are zipped in via resolveIndexers.
 	indexers     []wire.NewznabIndexer
 	vpnKey       string
 	vpnCountries string
@@ -120,9 +122,18 @@ func parseFlags(args []string, out *os.File) *options {
 	fs.StringVar(&o.usenetPass, "usenet-pass", "", "usenet provider password")
 	fs.IntVar(&o.usenetPort, "usenet-port", 0, "usenet provider port (default: the preset's, or 563 TLS)")
 	fs.IntVar(&o.usenetConnections, "usenet-connections", 0, "usenet connection count (default: the preset's, or 20)")
-	fs.StringVar(&o.indexerName, "indexer-name", "", "a usenet indexer to add to Prowlarr (with --indexer-url and --indexer-key)")
-	fs.StringVar(&o.indexerURL, "indexer-url", "", "the indexer's URL (generic Newznab)")
-	fs.StringVar(&o.indexerKey, "indexer-key", "", "the indexer's API key")
+	fs.Func("indexer-name", "a usenet indexer to add to Prowlarr (repeatable; with matching --indexer-url and --indexer-key)", func(v string) error {
+		o.indexerNames = append(o.indexerNames, v)
+		return nil
+	})
+	fs.Func("indexer-url", "the indexer's URL (generic Newznab; repeatable)", func(v string) error {
+		o.indexerURLs = append(o.indexerURLs, v)
+		return nil
+	})
+	fs.Func("indexer-key", "the indexer's API key (repeatable)", func(v string) error {
+		o.indexerKeys = append(o.indexerKeys, v)
+		return nil
+	})
 	fs.StringVar(&o.vpnKey, "vpn-wireguard-key", "", "wireguard private key for the VPN (persisted 0600 in the state file)")
 	fs.StringVar(&o.vpnCountries, "vpn-countries", "", "optional comma-separated server countries for the VPN")
 	fs.StringVar(&o.plexClaim, "plex-claim", "", "claim token from https://plex.tv/claim (valid 4 minutes; first boot only)")

@@ -93,6 +93,14 @@ type State struct {
 	// Apps holds registry IDs, in no particular order.
 	Apps []string `yaml:"apps"`
 
+	// Owned lists apps whose appdata Arrsenal itself created (they were
+	// fresh — not adopted — the first run that selected them). Per-run
+	// adoption checks see "appdata predates the run" on every re-run, which
+	// would mislabel our own installs as adopted and strand any settings
+	// lane that failed once; the ledger keeps them ours across runs. Apps
+	// adopted from a pre-existing setup are deliberately never added.
+	Owned []string `yaml:"owned,omitempty"`
+
 	PUID  int    `yaml:"puid"`
 	PGID  int    `yaml:"pgid"`
 	TZ    string `yaml:"tz"`
@@ -130,6 +138,16 @@ type State struct {
 	TRaSH TRaSH `yaml:"trash,omitempty"`
 
 	Secrets Secrets `yaml:"secrets,omitempty"`
+}
+
+// IsOwned reports whether Arrsenal created this app's appdata itself.
+func (s *State) IsOwned(id string) bool {
+	for _, o := range s.Owned {
+		if o == id {
+			return true
+		}
+	}
+	return false
 }
 
 // New returns a state with the documented defaults. Environment-derived
