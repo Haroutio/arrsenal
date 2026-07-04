@@ -91,11 +91,11 @@ type NewznabIndexer struct {
 
 // indexer mirrors Prowlarr's /api/v1/indexer resource loosely.
 type indexer struct {
-	Name           string     `json:"name"`
-	Implementation string     `json:"implementation"`
-	ConfigContract string     `json:"configContract"`
-	Protocol       string     `json:"protocol,omitempty"`
-	Enable         bool       `json:"enable"`
+	Name           string `json:"name"`
+	Implementation string `json:"implementation"`
+	ConfigContract string `json:"configContract"`
+	Protocol       string `json:"protocol,omitempty"`
+	Enable         bool   `json:"enable"`
 	// Redirect sends grabs straight to the indexer instead of proxying the
 	// download through Prowlarr. Prowlarr REQUIRES it on for usenet
 	// indexers — validation rejects the save otherwise (found live).
