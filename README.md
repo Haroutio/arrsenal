@@ -22,9 +22,10 @@ questions, and land on a fully wired system:
 
 ![A complete arrsenal install: the boot splash, app selection, TRaSH quality questions, and the final wiring report — 29 wired, zero manual steps](docs/assets/demo.gif)
 
-That run's report, verbatim — ✓ wired, ● existed already and left alone,
-↻ kept in sync ([what's TRaSH?](#trash-guide-quality-profiles)). On a box with
-a GPU there's one more line: `✓ Jellyfin hardware transcoding (nvenc)`.
+Here's the full report from that run. A ✓ is a connection Arrsenal made, a ●
+is one that already existed and was left alone, and a ↻ is one it re-syncs on
+every run — the [TRaSH quality profiles](#trash-guide-quality-profiles). On a
+box with a GPU there's one more line: `✓ Jellyfin hardware transcoding (nvenc)`.
 
 ```
 Wiring report:
