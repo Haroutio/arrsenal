@@ -73,6 +73,9 @@ type options struct {
 	usenetPass        string
 	usenetPort        int
 	usenetConnections int
+	// usenetProviders collects interactively-entered providers (the prompt
+	// loops); the flag set above feeds one more via resolveUsenetProviders.
+	usenetProviders []wire.UsenetProvider
 	// The indexer flags are repeatable: pass --indexer-name/--indexer-url/
 	// --indexer-key once per indexer, in matching order.
 	indexerNames []string
