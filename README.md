@@ -172,6 +172,11 @@ a certification — Arrsenal re-syncs them every run (which is why the report ma
 them ↻ synced, and why hand-edits to the TRaSH-named profiles don't stick; your own
 profiles are never touched).
 
+Saying yes to TRaSH also applies the guides' recommended naming scheme (rename on,
+filenames that keep quality, codec, and release group) and file-management defaults
+to a fresh Sonarr and Radarr. Adopted installs keep their naming exactly as it was —
+renaming an existing library out from under you is not a thing this tool does.
+
 ## Ground rules
 
 - **The state file is the source of truth.** Your answers live in

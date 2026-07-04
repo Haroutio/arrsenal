@@ -126,7 +126,7 @@ func parseFlags(args []string, out *os.File) *options {
 	fs.StringVar(&o.vpnKey, "vpn-wireguard-key", "", "wireguard private key for the VPN (persisted 0600 in the state file)")
 	fs.StringVar(&o.vpnCountries, "vpn-countries", "", "optional comma-separated server countries for the VPN")
 	fs.StringVar(&o.plexClaim, "plex-claim", "", "claim token from https://plex.tv/claim (valid 4 minutes; first boot only)")
-	fs.BoolVar(&o.trash, "trash", false, "apply TRaSH-guide quality settings to Sonarr/Radarr via Recyclarr")
+	fs.BoolVar(&o.trash, "trash", false, "apply TRaSH-guide quality settings and naming scheme to Sonarr/Radarr")
 	fs.StringVar(&o.trashResolution, "trash-resolution", "1080p", "TRaSH profile resolution: 1080p or 2160p")
 	fs.StringVar(&o.trashSource, "trash-source", "bluray-web", "TRaSH profile source: bluray-web or remux")
 	fs.BoolVar(&o.trashAnime, "trash-anime", false, "also apply the TRaSH anime profiles")

@@ -215,7 +215,7 @@ func interactiveFill(s *state.State, o *options) error {
 	// adoption gate — on an existing arr this converges its TRaSH-named
 	// profiles, which the prompt says out loud.
 	if (selectedID(s, "sonarr") || selectedID(s, "radarr")) && !s.TRaSH.Enabled && !o.trash {
-		if confirm("Apply TRaSH-guide quality settings to Sonarr/Radarr (recommended sizes, custom formats, profiles via Recyclarr)?", false) {
+		if confirm("Apply TRaSH-guide quality settings to Sonarr/Radarr (recommended sizes, custom formats, profiles, naming scheme)?", false) {
 			t := state.TRaSH{Enabled: true, Resolution: "1080p", Source: "bluray-web"}
 			if confirm("Target 4K (2160p) instead of 1080p?", false) {
 				t.Resolution = "2160p"
@@ -224,7 +224,7 @@ func interactiveFill(s *state.State, o *options) error {
 				t.Source = "remux"
 			}
 			t.Anime = confirm("Also apply the anime profiles?", false)
-			fmt.Println("note: this creates/updates the TRaSH-named quality profiles in your arrs on every run — existing custom profiles are untouched")
+			fmt.Println("note: this creates/updates the TRaSH-named quality profiles in your arrs on every run — existing custom profiles are untouched; fresh installs also get the guides' naming scheme")
 			s.TRaSH = t
 		}
 	}
