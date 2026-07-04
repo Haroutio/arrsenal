@@ -22,6 +22,7 @@ type RemapModel struct {
 	names  []preflight.Conflict
 	inputs []textinput.Model
 	focus  int
+	width  int // terminal width from WindowSizeMsg; 0 = unknown, no wrap
 	err    string
 	done   bool
 	back   bool
@@ -129,6 +130,10 @@ func (m RemapModel) validate(s *state.State) error {
 
 // UpdateWith drives the screen.
 func (m RemapModel) UpdateWith(msg tea.Msg, s *state.State) (RemapModel, tea.Cmd) {
+	if size, ok := msg.(tea.WindowSizeMsg); ok {
+		m.width = size.Width
+		return m, nil
+	}
 	if key, ok := msg.(tea.KeyMsg); ok {
 		switch key.String() {
 		case "ctrl+c", "esc":
@@ -180,14 +185,14 @@ func (m RemapModel) View() string {
 	var b strings.Builder
 	b.WriteString(header("Conflicts found") + "\n")
 	for _, c := range m.names {
-		b.WriteString(styleWarn.Render("✗ "+c.Detail) + "\n")
+		b.WriteString(styleWarn.Render(wrapText(m.width, 0, "✗ "+c.Detail)) + "\n")
 	}
 	for i, c := range m.ports {
 		fmt.Fprintf(&b, "%s\n  new host port for %s: %s\n",
-			styleWarn.Render("✗ "+c.Detail), c.App, m.inputs[i].View())
+			styleWarn.Render(wrapText(m.width, 0, "✗ "+c.Detail)), c.App, m.inputs[i].View())
 	}
 	if m.err != "" {
-		b.WriteString("\n" + styleWarn.Render("✗ "+m.err) + "\n")
+		b.WriteString("\n" + styleWarn.Render(wrapText(m.width, 0, "✗ "+m.err)) + "\n")
 	}
 	pairs := []string{"enter", "apply", "b", "back to selection", "esc", "quit"}
 	if len(m.inputs) > 1 {
