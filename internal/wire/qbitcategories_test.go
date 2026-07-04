@@ -27,14 +27,17 @@ func (f *fakeQBit) server() *httptest.Server {
 			w.WriteHeader(http.StatusForbidden)
 			return
 		}
+		// v5 semantics, verified live: 401 on bad credentials, 204 with an
+		// empty body on success.
 		if r.FormValue("password") != f.password {
-			_, _ = w.Write([]byte("Fails."))
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte("Unauthorized"))
 			return
 		}
 		// Path=/ matches real qBittorrent; without it the jar would scope
 		// the cookie to /api/v2/auth/ only.
 		http.SetCookie(w, &http.Cookie{Name: "SID", Value: "session-1", Path: "/"})
-		_, _ = w.Write([]byte("Ok."))
+		w.WriteHeader(http.StatusNoContent)
 	})
 	requireSession := func(r *http.Request) bool {
 		c, err := r.Cookie("SID")
@@ -108,9 +111,31 @@ func TestQBitLoginRejectsBadPassword(t *testing.T) {
 
 	_, err := NewQBitSession(context.Background(), srv.URL, "admin", "wrong-pass-SECRET")
 	if err == nil {
-		t.Fatal("a 200 'Fails.' body must still be a login failure")
+		t.Fatal("a 401 must be a login failure")
 	}
 	if strings.Contains(err.Error(), "wrong-pass-SECRET") {
 		t.Fatalf("error leaked the password: %v", err)
+	}
+}
+
+func TestQBitLoginV4Semantics(t *testing.T) {
+	// qBittorrent 4.x answers 200 either way, with a plain-text verdict.
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /api/v2/auth/login", func(w http.ResponseWriter, r *http.Request) {
+		if r.FormValue("password") == "right" {
+			http.SetCookie(w, &http.Cookie{Name: "SID", Value: "s", Path: "/"})
+			_, _ = w.Write([]byte("Ok."))
+			return
+		}
+		_, _ = w.Write([]byte("Fails."))
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	if _, err := NewQBitSession(context.Background(), srv.URL, "admin", "right"); err != nil {
+		t.Fatalf("v4 'Ok.' must be a login: %v", err)
+	}
+	if _, err := NewQBitSession(context.Background(), srv.URL, "admin", "wrong"); err == nil {
+		t.Fatal("v4 200 'Fails.' must still be a login failure")
 	}
 }

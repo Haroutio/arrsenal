@@ -369,7 +369,11 @@ func OrchestrateTail(ctx context.Context, spec Spec) []Result {
 	}
 	var results []Result
 	if sel["bazarr"] && spec.BazarrAPIKey != "" {
-		c := NewClient(spec.Access("bazarr"), spec.BazarrAPIKey, "X-API-KEY")
+		// Readiness means the CONTAINER runs; Bazarr's web server takes a
+		// while longer on first boot (migrations, config parse) — caught
+		// live in CI as connection-refused. Patience, not failure.
+		c := NewClient(spec.Access("bazarr"), spec.BazarrAPIKey, "X-API-KEY").
+			WithRetry(6, 5*time.Second)
 		results = append(results, EnsureBazarrLanguages(ctx, c, spec.Adopted["bazarr"]))
 	}
 	return results

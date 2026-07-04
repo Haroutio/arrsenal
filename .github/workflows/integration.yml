@@ -101,9 +101,12 @@ jobs:
           # qBittorrent categories carry save paths on the shared tree
           # (issue #107) — asserted through the same WebUI API the wiring used.
           QBPASS=$(sed -nE 's/^ *qbittorrent_webui_password: (.*)/\1/p' /tmp/arrtest/arrsenal.yaml)
-          curl -s -c /tmp/qb.jar -H "Referer: http://localhost:8081" \
+          # v5 answers the login with a bodyless 204 (v4 said 200 "Ok."):
+          # any 2xx is a session, and the category read below proves it.
+          code=$(curl -s -o /dev/null -w '%{http_code}' -c /tmp/qb.jar -H "Referer: http://localhost:8081" \
             --data-urlencode "username=admin" --data-urlencode "password=$QBPASS" \
-            http://localhost:8081/api/v2/auth/login | grep -q Ok
+            http://localhost:8081/api/v2/auth/login)
+          case "$code" in 2*) ;; *) echo "qbit login HTTP $code" && exit 1 ;; esac
           cats=$(curl -s -b /tmp/qb.jar http://localhost:8081/api/v2/torrents/categories)
           echo "$cats" | jq -e '.tv.savePath=="/data/torrents/tv"' >/dev/null || (echo "qbit tv category: $cats" && exit 1)
           echo "$cats" | jq -e '.music.savePath=="/data/torrents/music"' >/dev/null || (echo "qbit music category: $cats" && exit 1)
