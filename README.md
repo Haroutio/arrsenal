@@ -250,9 +250,11 @@ install Docker yourself and you're Tier 2.
 
 No — the compose file is the easy 10%. Arrsenal's point is the other 90%:
 after the containers start, it talks to every app's API and connects them —
-Prowlarr to the arrs, the arrs to SABnzbd, root folders, authentication,
-Jellyfin's wizard and hardware transcoding, TRaSH quality profiles, the
-Seerr request page, the dashboard.
+Prowlarr to the arrs, the arrs to the download clients, root folders,
+authentication, your usenet provider and indexers, torrent categories that
+keep downloads on the shared tree, Jellyfin's wizard and hardware
+transcoding, TRaSH quality profiles and naming, Bazarr's subtitle
+languages, the Seerr request page, the dashboard.
 
 ### Does it work with an existing Sonarr/Radarr/Jellyfin setup?
 

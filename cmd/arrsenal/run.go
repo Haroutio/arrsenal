@@ -448,6 +448,20 @@ func pipeline(s *state.State, o options) error {
 		fmt.Printf("%s: %s %s\n", r.Connection, r.Outcome, r.Detail)
 	}
 
+	// Bazarr's API key is pre-seeded the same way (issue #107): generated
+	// once, persisted, written into the config.yaml the wiring pass renders.
+	// The language pre-seed authenticates with it after Bazarr boots.
+	if selectedID(s, "bazarr") && s.Secrets.BazarrAPIKey == "" {
+		key, err := wire.GeneratePassword()
+		if err != nil {
+			return fmt.Errorf("generating Bazarr API key: %w", err)
+		}
+		s.Secrets.BazarrAPIKey = key
+		if err := s.Save(o.statePath); err != nil {
+			return err
+		}
+	}
+
 	// Plex's claim token is per-run (4-minute expiry): written into a 0600
 	// env-file the compose service references, empty when none was given.
 	// After the first claimed boot the token is irrelevant (issue #26).
@@ -521,6 +535,13 @@ func pipeline(s *state.State, o options) error {
 	}
 	if len(tail) > 0 {
 		printReadiness(docker.WaitReady(tail, 3*time.Minute, 2*time.Second))
+		if !o.skipWiring {
+			// The tail pass: wiring that needs the tail apps RUNNING —
+			// Orchestrate ran before they booted (their configs are its
+			// output). Results join the same report.
+			wiring = append(wiring,
+				wire.OrchestrateTail(context.Background(), buildSpec(s, o, conflictsAdopted(conflicts)))...)
+		}
 	}
 
 	if len(wiring) > 0 {
@@ -630,10 +651,11 @@ func buildSpec(s *state.State, o options, adopted map[string]bool) wire.Spec {
 		Usenet:   resolveUsenetProvider(o),
 		Indexers: resolveIndexers(o),
 		TRaSH:    trash, RecyclarrDir: recyclarrDir, RunRecyclarr: runRecyclarr,
-		AdminUser: o.adminUser,
-		AdminPass: o.adminPass,
-		QBitPass:  s.Secrets.QBittorrentPassword,
-		HWAccel:   hwAccelFor(s.GPU),
+		AdminUser:    o.adminUser,
+		AdminPass:    o.adminPass,
+		QBitPass:     s.Secrets.QBittorrentPassword,
+		BazarrAPIKey: s.Secrets.BazarrAPIKey,
+		HWAccel:      hwAccelFor(s.GPU),
 		Access: func(id string) string {
 			app, ok := registry.ByID(id)
 			if !ok {

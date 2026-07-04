@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/cookiejar"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -109,6 +110,13 @@ func (c *Client) PutJSON(ctx context.Context, path string, body, out any) error 
 	return c.do(ctx, http.MethodPut, path, body, out)
 }
 
+// PostForm sends form url-encoded, for the APIs that never learned JSON
+// bodies (qBittorrent's WebUI API, Bazarr's settings endpoint). Values in
+// the form are NOT auto-redacted — register secrets with WithRedaction.
+func (c *Client) PostForm(ctx context.Context, path string, form url.Values, out any) error {
+	return c.do(ctx, http.MethodPost, path, form, out)
+}
+
 // errf builds an error with every registered secret scrubbed — paths can
 // carry keys in query strings (SABnzbd), bodies can be echoed by servers.
 func (c *Client) errf(format string, args ...any) error {
@@ -117,7 +125,11 @@ func (c *Client) errf(format string, args ...any) error {
 
 func (c *Client) do(ctx context.Context, method, path string, body, out any) error {
 	var payload []byte
-	if body != nil {
+	contentType := "application/json"
+	if form, ok := body.(url.Values); ok {
+		payload = []byte(form.Encode())
+		contentType = "application/x-www-form-urlencoded"
+	} else if body != nil {
 		var err error
 		if payload, err = json.Marshal(body); err != nil {
 			return c.errf("%s %s: encoding request: %v", method, path, err)
@@ -139,7 +151,7 @@ func (c *Client) do(ctx context.Context, method, path string, body, out any) err
 			return c.errf("%s %s: %v", method, path, err)
 		}
 		if body != nil {
-			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Content-Type", contentType)
 		}
 		if c.header != "" {
 			req.Header.Set(c.header, c.key)
@@ -173,7 +185,13 @@ func (c *Client) do(ctx context.Context, method, path string, body, out any) err
 			return c.errf("%s %s: HTTP %d: %s", method, path, resp.StatusCode, string(respBody))
 		}
 
-		if out != nil {
+		switch dst := out.(type) {
+		case nil:
+		case *string:
+			// Raw capture, for endpoints whose success signal is a plain-text
+			// body (qBittorrent's login answers "Ok." / "Fails.").
+			*dst = string(respBody)
+		default:
 			if err := json.Unmarshal(respBody, out); err != nil {
 				return c.errf("%s %s: decoding response: %v", method, path, err)
 			}
