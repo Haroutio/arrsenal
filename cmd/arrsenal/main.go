@@ -66,10 +66,15 @@ type options struct {
 	downloadsRoot   string
 	jellyfinHostNet bool
 
-	vpnProvider  string
-	vpnKey       string
-	vpnCountries string
-	plexClaim    string
+	vpnProvider       string
+	usenetProvider    string
+	usenetUser        string
+	usenetPass        string
+	usenetPort        int
+	usenetConnections int
+	vpnKey            string
+	vpnCountries      string
+	plexClaim         string
 
 	trash           bool
 	trashResolution string
@@ -103,6 +108,11 @@ func parseFlags(args []string, out *os.File) *options {
 	fs.StringVar(&o.downloadsRoot, "downloads-root", "", "put the download trees on their own filesystem (blank = under data root, hardlink imports)")
 	fs.BoolVar(&o.jellyfinHostNet, "jellyfin-host-network", false, "run Jellyfin on host networking (DLNA/discovery)")
 	fs.StringVar(&o.vpnProvider, "vpn-provider", "", "route qBittorrent through gluetun with this VPN provider (wireguard)")
+	fs.StringVar(&o.usenetProvider, "usenet-provider", "", "news server for SABnzbd: a preset (newshosting, eweka, usenetserver, frugal, easynews) or a hostname")
+	fs.StringVar(&o.usenetUser, "usenet-user", "", "usenet provider username")
+	fs.StringVar(&o.usenetPass, "usenet-pass", "", "usenet provider password")
+	fs.IntVar(&o.usenetPort, "usenet-port", 0, "usenet provider port (default: the preset's, or 563 TLS)")
+	fs.IntVar(&o.usenetConnections, "usenet-connections", 0, "usenet connection count (default: the preset's, or 20)")
 	fs.StringVar(&o.vpnKey, "vpn-wireguard-key", "", "wireguard private key for the VPN (persisted 0600 in the state file)")
 	fs.StringVar(&o.vpnCountries, "vpn-countries", "", "optional comma-separated server countries for the VPN")
 	fs.StringVar(&o.plexClaim, "plex-claim", "", "claim token from https://plex.tv/claim (valid 4 minutes; first boot only)")

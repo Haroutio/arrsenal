@@ -43,6 +43,7 @@ jobs:
           ./arrsenal --yes --apps prowlarr,sonarr,lidarr,sabnzbd --gpu none \
             --admin-user ci --admin-pass ci-wiring-pass \
             --trash --trash-resolution 1080p \
+            --usenet-provider news.example.test --usenet-user ci --usenet-pass ci-usenet-pass \
             --data-root /tmp/arrtest/data --appdata-root /tmp/arrtest/appdata \
             --state /tmp/arrtest/arrsenal.yaml --artifacts-dir /tmp/arrtest \
             --puid "$(id -u)" --pgid "$(id -g)" | tee /tmp/first-run.log
@@ -87,6 +88,8 @@ jobs:
             '.[] | select(.path=="/data/media/music")' "lidarr has the /data/media/music root folder (api v1)"
           assert_json http://localhost:8686/api/v1/config/host "X-Api-Key: $LIDK" \
             'select(.authenticationMethod=="forms")' "lidarr auth is forms (api v1)"
+          echo "usenet provider registered in SAB:"
+          grep -E '^host = news.example.test' /tmp/arrtest/appdata/sabnzbd/sabnzbd.ini
       - name: re-run is idempotent — everything comes back existed, nothing re-wired
         run: |
           ./arrsenal --yes --gpu none --admin-user ci --admin-pass ci-wiring-pass \

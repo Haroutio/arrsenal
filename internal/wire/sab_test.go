@@ -170,3 +170,90 @@ func TestSABKeyNeverLeaksFromQueryString(t *testing.T) {
 		t.Fatalf("key should be visibly redacted in the path: %s", r.Detail)
 	}
 }
+
+// fakeSABServers models the servers section: a get that lists what exists
+// and a set that records the exact registration query.
+func fakeSABServers(t *testing.T, existingHost string, sets *atomic.Int32, lastQuery *string) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		switch q.Get("mode") {
+		case "get_config":
+			servers := `[]`
+			if existingHost != "" {
+				servers = `[{"host":"` + existingHost + `"}]`
+			}
+			_, _ = w.Write([]byte(`{"config":{"servers":` + servers + `}}`))
+		case "set_config":
+			sets.Add(1)
+			*lastQuery = r.URL.RawQuery
+			_, _ = w.Write([]byte(`{"config":{}}`))
+		default:
+			w.WriteHeader(http.StatusBadRequest)
+		}
+	}))
+}
+
+func TestEnsureSABServerRegistersProvider(t *testing.T) {
+	var sets atomic.Int32
+	var lastQuery string
+	srv := fakeSABServers(t, "", &sets, &lastQuery)
+	defer srv.Close()
+
+	p := UsenetPresets["newshosting"]
+	p.Username, p.Password = "demo", "usenet-pass-SECRET"
+	c := NewSABClient(srv.URL, "sab-key-SECRET")
+	c.backoff = time.Millisecond
+	r := EnsureSABServer(context.Background(), c, p)
+	if r.Outcome != OutcomeWired || sets.Load() != 1 {
+		t.Fatalf("fresh SAB must get the server: %+v sets=%d", r, sets.Load())
+	}
+	for _, want := range []string{"host=news.newshosting.com", "port=563", "ssl=1",
+		"username=demo", "connections=30", "enable=1"} {
+		if !strings.Contains(lastQuery, want) {
+			t.Fatalf("registration query missing %q:\n%s", want, lastQuery)
+		}
+	}
+}
+
+func TestEnsureSABServerNeverTouchesExisting(t *testing.T) {
+	var sets atomic.Int32
+	var lastQuery string
+	srv := fakeSABServers(t, "news.newshosting.com", &sets, &lastQuery)
+	defer srv.Close()
+
+	p := UsenetPresets["newshosting"]
+	p.Username, p.Password = "demo", "other-pass"
+	c := NewSABClient(srv.URL, "sab-key-SECRET")
+	c.backoff = time.Millisecond
+	r := EnsureSABServer(context.Background(), c, p)
+	if r.Outcome != OutcomeExisted || sets.Load() != 0 {
+		t.Fatalf("existing server must be untouched (even the credentials): %+v sets=%d", r, sets.Load())
+	}
+}
+
+func TestEnsureSABServerRedactsPasswordOnFailure(t *testing.T) {
+	// Hostile echo: the error body reflects the full request URL, password
+	// and all — the report must never carry it.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("mode") == "get_config" {
+			_, _ = w.Write([]byte(`{"config":{"servers":[]}}`))
+			return
+		}
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte("boom: " + r.URL.String()))
+	}))
+	defer srv.Close()
+
+	p := UsenetPresets["newshosting"]
+	p.Username, p.Password = "demo", "usenet-pass-SECRET"
+	c := NewSABClient(srv.URL, "sab-key-SECRET")
+	c.backoff = time.Millisecond
+	r := EnsureSABServer(context.Background(), c, p)
+	if r.Outcome != OutcomeFailed {
+		t.Fatalf("want failure, got %+v", r)
+	}
+	if strings.Contains(r.Detail, "usenet-pass-SECRET") {
+		t.Fatalf("password leaked into the report:\n%s", r.Detail)
+	}
+}
