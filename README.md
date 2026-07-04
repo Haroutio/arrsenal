@@ -151,8 +151,7 @@ installs: `sudo arrsenal --yes --apps sonarr,radarr,... --admin-pass ...`
 | [Homepage](https://gethomepage.dev) | Dashboard, widgets pre-wired |
 
 Hardware transcoding — using your GPU to convert video on the fly so it plays
-smoothly on any device — is free in Jellyfin; Plex and Emby charge for it, and
-those warnings appear right on the selection screen.
+smoothly on any device — is free in Jellyfin; Plex and Emby charge for it.
 
 Two options during setup deserve a mention. qBittorrent can be routed through a
 [gluetun](https://github.com/qdm12/gluetun) WireGuard tunnel: it shares gluetun's
