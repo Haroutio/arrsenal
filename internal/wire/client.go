@@ -168,7 +168,11 @@ func (c *Client) do(ctx context.Context, method, path string, body, out any) err
 			continue // connection refused etc. — the app may still be starting
 		}
 
-		respBody, readErr := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+		// The cap guards against an unbounded/broken server, but it must
+		// clear the biggest legitimate response: Prowlarr's indexer schema
+		// (its full definition catalog) runs to tens of MB, and a 1MB cap
+		// truncated it mid-JSON — found live wiring a real indexer.
+		respBody, readErr := io.ReadAll(io.LimitReader(resp.Body, 64<<20))
 		_ = resp.Body.Close()
 		if readErr != nil {
 			lastErr = c.errf("%s %s: reading response: %v", method, path, readErr)
