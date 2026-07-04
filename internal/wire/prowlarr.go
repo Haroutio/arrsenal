@@ -96,9 +96,13 @@ type indexer struct {
 	ConfigContract string     `json:"configContract"`
 	Protocol       string     `json:"protocol,omitempty"`
 	Enable         bool       `json:"enable"`
-	AppProfileID   int        `json:"appProfileId"`
-	Priority       int        `json:"priority,omitempty"`
-	Fields         []appField `json:"fields"`
+	// Redirect sends grabs straight to the indexer instead of proxying the
+	// download through Prowlarr. Prowlarr REQUIRES it on for usenet
+	// indexers — validation rejects the save otherwise (found live).
+	Redirect     bool       `json:"redirect"`
+	AppProfileID int        `json:"appProfileId"`
+	Priority     int        `json:"priority,omitempty"`
+	Fields       []appField `json:"fields"`
 }
 
 // EnsureNewznabIndexer registers a usenet indexer in Prowlarr, from where it
@@ -145,6 +149,7 @@ func EnsureNewznabIndexer(ctx context.Context, prowlarr *Client, t NewznabIndexe
 
 			tmpl.Name = t.Name
 			tmpl.Enable = true
+			tmpl.Redirect = true // required for usenet indexers (validated on save)
 			if tmpl.AppProfileID == 0 {
 				tmpl.AppProfileID = 1 // Prowlarr's built-in default sync profile
 			}
