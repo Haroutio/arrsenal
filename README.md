@@ -231,7 +231,18 @@ install Docker yourself and you're Tier 2.
 | v0.6 | Seerr (the Overseerr/Jellyseerr merger) sets itself up | ✅ |
 | v1.0 | Stability: docs site, hardening, stable state schema | next |
 
-Architecture and design reasoning live in [docs/DESIGN.md](docs/DESIGN.md).
+## Docs
+
+- [User guide](docs/GUIDE.md) — the long-form walkthrough: every prompt,
+  the report symbols, the data layout, headless mode, day-two commands
+- [Override cookbook](docs/COOKBOOK.md) — pin images, add containers,
+  mount extra disks, without fighting the generated files
+- [Adopting an existing setup](docs/ADOPTING.md) — what adoption
+  guarantees, and the two migration paths from a hand-built stack
+- [Troubleshooting](docs/TROUBLESHOOTING.md) — where things live, common
+  warnings, GPU/SELinux/VPN digging
+- [DESIGN.md](docs/DESIGN.md) — architecture and design reasoning, for
+  contributors
 
 ## FAQ
 
