@@ -76,6 +76,11 @@ func goldenCases() map[string]*state.State {
 	vpn.VPN = state.VPN{Provider: "mullvad", Countries: "Netherlands"}
 	vpn.Secrets.WireguardPrivateKey = "wg-key-SECRET"
 
+	// Issue #106: TRaSH enabled adds the scheduled Recyclarr service.
+	trash := baseState()
+	trash.Apps = []string{"sonarr", "radarr", "sabnzbd"}
+	trash.TRaSH = state.TRaSH{Enabled: true, Resolution: "1080p", Source: "bluray-web"}
+
 	return map[string]*state.State{
 		"minimal":          minimal,
 		"full-stack":       full,
@@ -87,6 +92,50 @@ func goldenCases() map[string]*state.State {
 		"split-storage":    split,
 		"vpn-qbittorrent":  vpn,
 		"plex-stack":       plex,
+		"trash-scheduled":  trash,
+	}
+}
+
+func TestScheduledRecyclarrShape(t *testing.T) {
+	got := render(t, goldenCases()["trash-scheduled"])
+	var doc struct {
+		Services map[string]struct {
+			Image       string            `yaml:"image"`
+			User        string            `yaml:"user"`
+			Ports       []string          `yaml:"ports"`
+			Environment map[string]string `yaml:"environment"`
+			Volumes     []string          `yaml:"volumes"`
+		} `yaml:"services"`
+	}
+	if err := yamlUnmarshal(got.Compose, &doc); err != nil {
+		t.Fatal(err)
+	}
+	rc, ok := doc.Services["recyclarr"]
+	if !ok {
+		t.Fatal("TRaSH-enabled state must render the scheduled recyclarr service")
+	}
+	if rc.Environment["CRON_SCHEDULE"] != "@daily" {
+		t.Fatalf("recyclarr must resync daily: %v", rc.Environment)
+	}
+	if rc.User != "${PUID}:${PGID}" {
+		t.Fatalf("recyclarr must run as the stack identity: %q", rc.User)
+	}
+	if len(rc.Volumes) != 1 || rc.Volumes[0] != "${APPDATA}/recyclarr:/config" {
+		t.Fatalf("recyclarr must mount the wiring pass's config: %v", rc.Volumes)
+	}
+	if len(rc.Ports) != 0 {
+		t.Fatalf("recyclarr publishes nothing: %v", rc.Ports)
+	}
+
+	// The pin lives in ONE place; the compose service must follow it.
+	if rc.Image != "ghcr.io/recyclarr/recyclarr:8" {
+		t.Fatalf("recyclarr image pin drifted: %q", rc.Image)
+	}
+
+	// And the flagship golden (no TRaSH) must NOT grow the service.
+	plain := render(t, goldenCases()["minimal"])
+	if bytes.Contains(plain.Compose, []byte("recyclarr")) {
+		t.Fatal("recyclarr service leaked into a TRaSH-less compose file")
 	}
 }
 
