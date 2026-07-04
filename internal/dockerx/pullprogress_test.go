@@ -64,7 +64,7 @@ func TestParsePullStreamKeepsErrorTail(t *testing.T) {
 }
 
 func TestComposeImagesDedupes(t *testing.T) {
-	d := NewWithRunner(nil, func(dir string, args ...string) (string, error) {
+	d := NewWithRunner(nil, func(_ string, args ...string) (string, error) {
 		if strings.Join(args, " ") != "compose config --images" {
 			t.Fatalf("args: %v", args)
 		}
