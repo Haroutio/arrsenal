@@ -12,6 +12,7 @@ import (
 
 	"github.com/Haroutio/arrsenal/internal/preflight"
 	"github.com/Haroutio/arrsenal/internal/state"
+	"github.com/Haroutio/arrsenal/internal/wire"
 )
 
 // version is stamped by goreleaser at release time; "dev" in local builds.
@@ -72,9 +73,15 @@ type options struct {
 	usenetPass        string
 	usenetPort        int
 	usenetConnections int
-	vpnKey            string
-	vpnCountries      string
-	plexClaim         string
+	indexerName       string
+	indexerURL        string
+	indexerKey        string
+	// indexers collects interactively-entered indexers (no flag; the flag
+	// trio above feeds one more via resolveIndexers).
+	indexers     []wire.NewznabIndexer
+	vpnKey       string
+	vpnCountries string
+	plexClaim    string
 
 	trash           bool
 	trashResolution string
@@ -113,6 +120,9 @@ func parseFlags(args []string, out *os.File) *options {
 	fs.StringVar(&o.usenetPass, "usenet-pass", "", "usenet provider password")
 	fs.IntVar(&o.usenetPort, "usenet-port", 0, "usenet provider port (default: the preset's, or 563 TLS)")
 	fs.IntVar(&o.usenetConnections, "usenet-connections", 0, "usenet connection count (default: the preset's, or 20)")
+	fs.StringVar(&o.indexerName, "indexer-name", "", "a usenet indexer to add to Prowlarr (with --indexer-url and --indexer-key)")
+	fs.StringVar(&o.indexerURL, "indexer-url", "", "the indexer's URL (generic Newznab)")
+	fs.StringVar(&o.indexerKey, "indexer-key", "", "the indexer's API key")
 	fs.StringVar(&o.vpnKey, "vpn-wireguard-key", "", "wireguard private key for the VPN (persisted 0600 in the state file)")
 	fs.StringVar(&o.vpnCountries, "vpn-countries", "", "optional comma-separated server countries for the VPN")
 	fs.StringVar(&o.plexClaim, "plex-claim", "", "claim token from https://plex.tv/claim (valid 4 minutes; first boot only)")

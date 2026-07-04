@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -108,5 +109,91 @@ func TestEnsureApplicationUnknownImplementationFails(t *testing.T) {
 	r := EnsureApplication(context.Background(), wireClient(srv.URL), target)
 	if r.Outcome != OutcomeFailed || f.posts.Load() != 0 {
 		t.Fatalf("missing template must fail without posting: %+v", r)
+	}
+}
+
+// fakeProwlarrIndexers serves the indexer surfaces: list, schema, create.
+type fakeProwlarrIndexers struct {
+	existing string // JSON array of existing indexers
+	posts    atomic.Int32
+	lastBody map[string]any
+}
+
+func (f *fakeProwlarrIndexers) server() *httptest.Server {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/v1/indexer", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(f.existing))
+	})
+	mux.HandleFunc("GET /api/v1/indexer/schema", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`[
+			{"name":"Some Torrent Tracker","implementation":"Cardigann","configContract":"CardigannSettings","fields":[]},
+			{"name":"Generic Newznab","implementation":"Newznab","configContract":"NewznabSettings","protocol":"usenet",
+			 "appProfileId":0,
+			 "fields":[{"name":"baseUrl","value":""},{"name":"apiPath","value":"/api"},{"name":"apiKey","value":""}]}
+		]`))
+	})
+	mux.HandleFunc("POST /api/v1/indexer", func(w http.ResponseWriter, r *http.Request) {
+		f.posts.Add(1)
+		_ = json.NewDecoder(r.Body).Decode(&f.lastBody)
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{}`))
+	})
+	return httptest.NewServer(mux)
+}
+
+func TestEnsureNewznabIndexerRegisters(t *testing.T) {
+	f := &fakeProwlarrIndexers{existing: `[]`}
+	srv := f.server()
+	defer srv.Close()
+
+	r := EnsureNewznabIndexer(context.Background(), wireClient(srv.URL), NewznabIndexer{
+		Name: "NZBgeek", URL: "https://api.nzbgeek.info", APIKey: "geek-key-SECRET"})
+	if r.Outcome != OutcomeWired || f.posts.Load() != 1 {
+		t.Fatalf("fresh indexer must be created: %+v posts=%d", r, f.posts.Load())
+	}
+	if f.lastBody["name"] != "NZBgeek" || f.lastBody["enable"] != true {
+		t.Fatalf("payload basics wrong: %+v", f.lastBody)
+	}
+	if f.lastBody["appProfileId"] != float64(1) {
+		t.Fatalf("default sync profile must be set: %+v", f.lastBody["appProfileId"])
+	}
+	fields := f.lastBody["fields"].([]any)
+	got := map[string]any{}
+	for _, fl := range fields {
+		m := fl.(map[string]any)
+		got[m["name"].(string)] = m["value"]
+	}
+	if got["baseUrl"] != "https://api.nzbgeek.info" || got["apiKey"] != "geek-key-SECRET" {
+		t.Fatalf("connection fields wrong: %+v", got)
+	}
+}
+
+func TestEnsureNewznabIndexerExistingUntouched(t *testing.T) {
+	f := &fakeProwlarrIndexers{existing: `[{"name":"NZBgeek"}]`}
+	srv := f.server()
+	defer srv.Close()
+
+	r := EnsureNewznabIndexer(context.Background(), wireClient(srv.URL), NewznabIndexer{
+		Name: "NZBgeek", URL: "https://elsewhere", APIKey: "other"})
+	if r.Outcome != OutcomeExisted || f.posts.Load() != 0 {
+		t.Fatalf("existing indexer must be untouched: %+v posts=%d", r, f.posts.Load())
+	}
+}
+
+func TestCheckIndexersHonesty(t *testing.T) {
+	empty := &fakeProwlarrIndexers{existing: `[]`}
+	srv := empty.server()
+	defer srv.Close()
+
+	r := CheckIndexers(context.Background(), wireClient(srv.URL), "http://host:9696")
+	if r == nil || r.Outcome != OutcomeManual || !strings.Contains(r.Detail, "no indexers") {
+		t.Fatalf("zero indexers must produce the manual warning: %+v", r)
+	}
+
+	populated := &fakeProwlarrIndexers{existing: `[{"name":"NZBgeek"}]`}
+	srv2 := populated.server()
+	defer srv2.Close()
+	if r := CheckIndexers(context.Background(), wireClient(srv2.URL), "http://host:9696"); r != nil {
+		t.Fatalf("populated prowlarr must be silent: %+v", r)
 	}
 }
