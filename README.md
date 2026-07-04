@@ -22,21 +22,46 @@ questions, and land on a fully wired system:
 
 ![A complete arrsenal install: the boot splash, app selection, TRaSH quality questions, and the final wiring report — 29 connections, zero manual configuration](docs/assets/demo.gif)
 
-A fresh install ends like this (TRaSH is a community guide, not a verdict — more on
-that [below](#trash-guide-quality-profiles-new-in-v04)):
+That run's report, verbatim (on a box with a GPU there's one more line:
+`✓ Jellyfin hardware transcoding (nvenc)`; TRaSH is a community guide, not a
+verdict — more on that [below](#trash-guide-quality-profiles-new-in-v04)):
 
 ```
 Wiring report:
   ✓ SABnzbd ← host whitelist "sabnzbd"
   ✓ SABnzbd ← download folders under /data/usenet
   ✓ SABnzbd ← category "tv"
+  ● SABnzbd ← category "movies"
+  ✓ SABnzbd ← category "music"
+  ✓ Prowlarr ← admin credential
   ✓ Sonarr ← admin credential
+  ✓ Radarr ← admin credential
+  ✓ Lidarr ← admin credential
   ✓ Prowlarr → Sonarr
   ✓ Sonarr → SABnzbd
   ✓ Sonarr root folder /data/media/tv
+  ✓ Prowlarr → Radarr
+  ✓ Radarr → SABnzbd
+  ✓ Radarr root folder /data/media/movies
+  ✓ Prowlarr → Lidarr
+  ✓ Lidarr → SABnzbd
+  ✓ Lidarr root folder /data/media/music
+  ✓ Jellyfin setup wizard
+  ✓ Jellyfin library "Movies"
+  ✓ Jellyfin library "Shows"
+  ✓ Jellyfin library "Music"
+  ✓ Jellyfin API key (dashboard widget)
+  ✓ Bazarr ← sonarr/radarr connections
+  ✓ Homepage ← service widgets
   ↻ Sonarr ← TRaSH quality profiles
+  ↻ Radarr ← TRaSH quality profiles
+  ✓ Seerr ← jellyfin sign-in
+  ✓ Seerr ← libraries
+  ✓ Seerr → Sonarr
+  ✓ Seerr → Radarr
+  ✓ Seerr initialized
 
-  7 wired · 1 synced
+  29 wired · 1 existed · 2 synced
 ```
 
 ## Never heard of the Arr apps? Start here
