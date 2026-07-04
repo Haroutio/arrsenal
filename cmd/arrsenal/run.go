@@ -613,7 +613,7 @@ func buildSpec(s *state.State, o options, adopted map[string]bool) wire.Spec {
 			// Recyclarr's image runs unprivileged; hand it the config dir.
 			chownTree(recyclarrDir, puid, pgid)
 			return dockerx.New().RunOneShot(
-				recyclarrImage,
+				quality.Image,
 				generate.NetworkName,
 				fmt.Sprintf("%d:%d", puid, pgid),
 				[]string{recyclarrDir + ":/config"},
@@ -687,11 +687,6 @@ func resolveIndexers(o options) []wire.NewznabIndexer {
 	}
 	return out
 }
-
-// recyclarrImage is pinned to the major: the generated config speaks the v8
-// schema, so a future v9 must be a deliberate upgrade — not a surprise
-// breakage (v8 itself broke v7's includes). `arrsenal update` re-pulls it.
-const recyclarrImage = "ghcr.io/recyclarr/recyclarr:8"
 
 // chownTree hands a directory tree to the container user (POSIX only; the
 // dev platform no-ops). Best effort — the sync surfaces any real problem.

@@ -7,6 +7,7 @@ import (
 
 	"github.com/goccy/go-yaml"
 
+	"github.com/Haroutio/arrsenal/internal/quality"
 	"github.com/Haroutio/arrsenal/internal/registry"
 	"github.com/Haroutio/arrsenal/internal/state"
 )
@@ -111,6 +112,9 @@ func Render(s *state.State, statePath string) (Artifacts, error) {
 	}
 	if s.VPNEnabled() {
 		services["gluetun"] = renderGluetun(s)
+	}
+	if s.TRaSH.Enabled {
+		services["recyclarr"] = renderRecyclarr()
 	}
 
 	cf := composeFile{
@@ -300,6 +304,26 @@ func renderGluetun(s *state.State) service {
 		svc.Ports = []portMapping{portMapping(fmt.Sprintf("%d:%d", host, container))}
 	}
 	return svc
+}
+
+// renderRecyclarr keeps the TRaSH profiles current between arrsenal runs
+// (issue #106): the guides move, and a stack synced once drifts. The service
+// reads the same config the wiring pass writes (and rewrites every run) and
+// resyncs daily via the image's built-in cron. Present only when TRaSH is
+// enabled — no consent, no container.
+func renderRecyclarr() service {
+	return service{
+		Image:         quality.Image,
+		ContainerName: "recyclarr",
+		Restart:       "unless-stopped",
+		User:          "${PUID}:${PGID}",
+		Networks:      []string{NetworkName},
+		Environment: map[string]string{
+			"TZ":            "${TZ}",
+			"CRON_SCHEDULE": "@daily",
+		},
+		Volumes: []string{"${APPDATA}/recyclarr:/config"},
+	}
 }
 
 // envBody renders .env in fixed order. Values the containers consume come

@@ -10,6 +10,13 @@ import (
 	"strings"
 )
 
+// Image is pinned to the major: the generated config speaks the v8 schema,
+// so a future v9 must be a deliberate upgrade — not a surprise breakage (v8
+// itself broke v7's includes). `arrsenal update` re-pulls it. Both consumers
+// share this pin: the one-shot sync at wiring time and the scheduled compose
+// service (issue #106).
+const Image = "ghcr.io/recyclarr/recyclarr:8"
+
 // Answers are the quality choices, in user language.
 type Answers struct {
 	// Resolution: "1080p" or "2160p".
