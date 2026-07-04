@@ -28,10 +28,17 @@ Concretely, on an adopted app:
   finished (the factory "no login" state) gets the admin credential
   applied. That's completing an unfinished setup, not changing a choice.
 
-Two settings are convergent *by consent*: the TRaSH quality profiles (and
+One setting is convergent *by consent*: the TRaSH quality profiles (and
 only the TRaSH-named ones) re-sync on every run and daily in between — the
 prompt says so before you enable it, and your own profiles are never
-touched.
+touched. Everything else TRaSH-related (naming, file-management defaults)
+applies once, to installs Arrsenal created, and never to adopted ones.
+
+One more explicit-intent case: passing `--usenet-provider` on a scripted
+run ADDS a news server to an adopted SABnzbd. That is additive — existing
+servers, including same-named ones, are never modified — and it happens
+only because you passed the flag; the interactive prompt doesn't offer it
+for an adopted SAB.
 
 ## Ports and names already in use
 

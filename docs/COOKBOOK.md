@@ -95,7 +95,7 @@ replacing the block.
 - **PUID/PGID, timezone, storage roots** — state-file answers; re-run
   `arrsenal` to change them.
 - **Jellyfin host networking** (DLNA/discovery) — a first-class option:
-  `--jellyfin-host-network`, or the settings screen.
+  re-run with `--jellyfin-host-network`.
 - **The VPN** — `--vpn-provider` and friends; the kill-switch topology is
   generated, don't hand-build it.
 

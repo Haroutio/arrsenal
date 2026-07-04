@@ -186,7 +186,8 @@ renaming an existing library out from under you is not a thing this tool does.
   touches.
 - **It never deletes data.** Removing an app removes its container; its configuration
   stays on disk until you delete it yourself. Even `arrsenal uninstall --purge`
-  removes only what Arrsenal created, and asks for typed confirmation first.
+  removes only the managed apps' configs and Arrsenal's own files — never your
+  media — and asks for typed confirmation first.
 - The shared `/data` layout follows the TRaSH guides so that imports are hardlinks —
   the same file appearing in two places at no extra cost — instead of slow copies.
   The preflight check (the tests Arrsenal runs before touching anything) performs a

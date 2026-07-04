@@ -62,8 +62,9 @@ see one `/data` inside the containers.
 
 **Admin credential.** One username + password, applied to every app that
 supports it during wiring: the arrs' login screens, Jellyfin's wizard,
-Seerr's sign-in. Collected, used, never written to disk. Enter skips it,
-and those steps become manual lines in the report.
+Seerr's sign-in. Collected, used, never written to disk. Enter skips it —
+the arrs then keep their no-login default, and Jellyfin/Seerr appear as ⚠
+manual lines in the report.
 
 **Plex claim token** (Plex only, fresh installs only): paste it within its
 4-minute life, or skip and claim later in Plex's own UI.
@@ -135,8 +136,10 @@ torrents keep seeding from the original path. Every app mounts the same
 `/data`, so the paths they exchange over their APIs agree.
 
 If downloads live on a separate filesystem (`--downloads-root`), imports
-are copies. Arrsenal says so during preflight and asks you to confirm —
-it's a fine trade if the scratch disk is the point.
+are copies. When that happens by accident — one data root quietly spanning
+a mount boundary — the interactive install warns and asks you to confirm;
+a deliberate `--downloads-root` split is taken at your word. A fine trade
+if the scratch disk is the point.
 
 ## Headless mode
 
@@ -176,6 +179,9 @@ state, and your media stay on disk — running `arrsenal` again brings the
 same stack back.
 
 **`arrsenal uninstall --purge`** also deletes the app configurations, state
-file, and generated artifacts — after a typed confirmation, and only the
-things Arrsenal created. Your media under `/data/media` is never deleted by
+file, and generated artifacts — after a typed confirmation. The scope is
+the managed apps' config directories, *including adopted ones*: if
+Arrsenal manages an app, purge removes its config, whether Arrsenal
+created it or inherited it. Foreign neighbors in the appdata root are
+untouched, and your media under `/data/media` is never deleted by
 anything.

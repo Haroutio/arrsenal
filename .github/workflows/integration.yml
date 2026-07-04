@@ -59,7 +59,8 @@ jobs:
             body=$(curl -s -H "$2" "$1")
             if ! echo "$body" | jq -e "$3" >/dev/null; then
               echo "ASSERTION FAILED: $4"
-              echo "GET $1 returned:"; echo "$body" | head -c 2000; echo
+              # Actions logs are public: scrub key-shaped values before echoing.
+              echo "GET $1 returned:"; echo "$body" | sed -E 's/"[Aa]pi[_-]?[Kk]ey": *"[^"]*"/"apiKey":"REDACTED"/g' | head -c 2000; echo
               exit 1
             fi
             echo "ok: $4"
@@ -96,8 +97,9 @@ jobs:
           assert_json http://localhost:8989/api/v3/config/mediamanagement "X-Api-Key: $SONK" \
             'select(.downloadPropersAndRepacks=="doNotPrefer" and .enableMediaInfo==true)' \
             "sonarr media management defaults applied"
-          echo "scheduled recyclarr service is running:"
-          docker ps --format '{{.Names}}' | grep -x recyclarr
+          echo "scheduled recyclarr service is running (and not crash-looping):"
+          [ "$(docker inspect -f '{{.State.Status}}' recyclarr)" = running ]
+          [ "$(docker inspect -f '{{.RestartCount}}' recyclarr)" -le 1 ]
           # qBittorrent categories carry save paths on the shared tree
           # (issue #107) — asserted through the same WebUI API the wiring used.
           QBPASS=$(sed -nE 's/^ *qbittorrent_webui_password: (.*)/\1/p' /tmp/arrtest/arrsenal.yaml)
@@ -118,9 +120,65 @@ jobs:
           assert_json http://localhost:6767/api/system/settings "X-API-KEY: $BZK" \
             'select(.general.serie_default_enabled==true and .general.movie_default_enabled==true)' \
             "bazarr defaults the profile for series and movies"
+      - name: an indexer wires against a live Newznab endpoint and syncs to the arrs
+        run: |
+          # A minimal fake — real enough for Prowlarr's on-save validation
+          # (caps + a search that must return parseable items). This coverage
+          # exists because two live-only bugs shipped past unit tests: the
+          # 1MB response cap truncating Prowlarr's schema, and the mandatory
+          # redirect flag for usenet indexers.
+          cat > /tmp/fakenzb.py <<'PYEOF'
+          import http.server
+          from urllib.parse import urlparse, parse_qs
+          CAPS = """<?xml version="1.0" encoding="UTF-8"?>
+          <caps><server version="1.0" title="FakeNZB"/><limits max="100" default="50"/>
+          <registration available="no" open="no"/>
+          <searching><search available="yes" supportedParams="q"/>
+          <tv-search available="yes" supportedParams="q,season,ep"/>
+          <movie-search available="yes" supportedParams="q,imdbid"/></searching>
+          <categories><category id="2000" name="Movies"/><category id="5000" name="TV"/></categories></caps>"""
+          FEED = """<?xml version="1.0" encoding="UTF-8"?>
+          <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:newznab="http://www.newznab.com/DTD/2010/feeds/attributes/">
+          <channel><title>FakeNZB</title>
+          <item><title>Fake.Release.S01E01.1080p.WEB.x264-CI</title>
+          <guid isPermaLink="true">http://fakenzb:8000/details/1</guid>
+          <link>http://fakenzb:8000/getnzb/1.nzb</link>
+          <pubDate>Wed, 01 Jan 2025 00:00:00 +0000</pubDate>
+          <enclosure url="http://fakenzb:8000/getnzb/1.nzb" length="1000000" type="application/x-nzb"/>
+          <newznab:attr name="category" value="5000"/>
+          <newznab:attr name="size" value="1000000"/></item></channel></rss>"""
+          class H(http.server.BaseHTTPRequestHandler):
+              def do_GET(self):
+                  q = parse_qs(urlparse(self.path).query)
+                  data = (CAPS if q.get("t", [""])[0] == "caps" else FEED).encode()
+                  self.send_response(200)
+                  self.send_header("Content-Type", "application/xml; charset=utf-8")
+                  self.send_header("Content-Length", str(len(data)))
+                  self.end_headers()
+                  self.wfile.write(data)
+              def log_message(self, *a): pass
+          http.server.ThreadingHTTPServer(("", 8000), H).serve_forever()
+          PYEOF
+          docker run -d --name fakenzb --network arrsenal -v /tmp/fakenzb.py:/fakenzb.py:ro python:3-alpine python3 /fakenzb.py
+          sleep 3
+          ./arrsenal --yes --gpu none --admin-user ci --admin-pass ci-wiring-pass \
+            --indexer-name FakeNZB --indexer-url http://fakenzb:8000 --indexer-key ci-fake-key \
+            --state /tmp/arrtest/arrsenal.yaml --artifacts-dir /tmp/arrtest | tee /tmp/indexer-run.log
+          grep -q '✓ Prowlarr ← indexer "FakeNZB"' /tmp/indexer-run.log
+          if grep -q "no indexers configured" /tmp/indexer-run.log; then
+            echo "zero-indexer warning must clear once an indexer exists" && exit 1
+          fi
+          # Prowlarr pushes it to every arr — assert it landed in sonarr.
+          SONK=$(sed -nE 's#.*<ApiKey>([^<]+)</ApiKey>.*#\1#p' /tmp/arrtest/appdata/sonarr/config.xml)
+          curl -s -H "X-Api-Key: $SONK" http://localhost:8989/api/v3/indexer | jq -e '.[] | select(.name | contains("FakeNZB"))' >/dev/null
+          echo "ok: FakeNZB validated, registered, and synced into sonarr"
       - name: re-run is idempotent — everything comes back existed, nothing re-wired
         run: |
+          # Same source flags as the runs above: the provider and indexer
+          # lanes must come back ● existed, not re-wire or fail.
           ./arrsenal --yes --gpu none --admin-user ci --admin-pass ci-wiring-pass \
+            --usenet-provider news.example.test --usenet-user ci --usenet-pass ci-usenet-pass \
+            --indexer-name FakeNZB --indexer-url http://fakenzb:8000 --indexer-key ci-fake-key \
             --state /tmp/arrtest/arrsenal.yaml --artifacts-dir /tmp/arrtest | tee /tmp/second-run.log
           # Assert within the wiring REPORT only — container readiness lines
           # legitimately print ✓ and must not trip the re-wire check.
@@ -138,9 +196,11 @@ jobs:
             --admin-user ci --admin-pass ci-wiring-pass \
             --state /tmp/arrtest/arrsenal.yaml --artifacts-dir /tmp/arrtest
           docker ps --format '{{.Names}}' | grep -x sonarr
-          if docker ps -a --format '{{.Names}}' | grep -x sabnzbd; then
-            echo "sabnzbd container should have been reconciled away" && exit 1
-          fi
+          for gone in sabnzbd qbittorrent bazarr; do
+            if docker ps -a --format '{{.Names}}' | grep -x "$gone"; then
+              echo "$gone container should have been reconciled away" && exit 1
+            fi
+          done
           test -d /tmp/arrtest/appdata/sabnzbd || (echo "appdata must be preserved" && exit 1)
       - name: uninstall is reversible by default
         run: |

@@ -95,6 +95,15 @@ country name fails there, and qBittorrent (which shares its network) shows
 it as "no internet". The kill switch working as designed looks exactly
 like this: no tunnel, no traffic.
 
+## I ran the first install with --skip-wiring
+
+`--skip-wiring` is a debug flag, and on a FIRST run it skips more than
+API calls: the pre-written configs (Bazarr's connections and API key,
+notably) are wiring output too. Bazarr then boots with its own defaults
+and is treated as adopted from that point on — Arrsenal won't rewrite a
+config it didn't write. If that wasn't what you wanted, stop the stack,
+delete `<appdata>/bazarr`, and re-run arrsenal without the flag.
+
 ## Starting over
 
 ```bash
@@ -102,8 +111,10 @@ arrsenal uninstall           # containers gone, configs and media stay
 arrsenal uninstall --purge   # + configs, state, artifacts (typed confirmation)
 ```
 
-`--purge` removes only what Arrsenal created. Media under `/data/media` is
-never deleted by anything.
+`--purge` removes the managed scope — the managed apps' config directories
+(adopted ones included), the state file, and the generated artifacts.
+Foreign directories in the appdata root survive; media under `/data/media`
+is never deleted by anything.
 
 ## Still stuck
 
