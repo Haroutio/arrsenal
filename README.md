@@ -20,11 +20,11 @@ open a browser, everything already works.
 Here is the whole thing, start to finish — boot, pick the stack, answer a few
 questions, and land on a fully wired system:
 
-![A complete arrsenal install: the boot splash, app selection, TRaSH quality questions, and the final wiring report — 29 connections, zero manual configuration](docs/assets/demo.gif)
+![A complete arrsenal install: the boot splash, app selection, TRaSH quality questions, and the final wiring report — 29 wired, zero manual steps](docs/assets/demo.gif)
 
-That run's report, verbatim (on a box with a GPU there's one more line:
-`✓ Jellyfin hardware transcoding (nvenc)`; TRaSH is a community guide, not a
-verdict — more on that [below](#trash-guide-quality-profiles-new-in-v04)):
+That run's report, verbatim — ✓ wired, ● existed already and left alone,
+↻ kept in sync ([what's TRaSH?](#trash-guide-quality-profiles)). On a box with
+a GPU there's one more line: `✓ Jellyfin hardware transcoding (nvenc)`.
 
 ```
 Wiring report:
@@ -90,8 +90,7 @@ The chore is introducing all of these to each other: half a dozen API keys to co
 around, download folders that have to line up exactly between apps, categories, root
 folders, hostname whitelists — and then the longest part, building out quality
 profiles and custom format scores so the arrs grab good releases instead of whatever
-shows up first. All of it is what Arrsenal automates, and re-runs stay safe: it only
-ever adds what's missing and never overwrites settings you've already changed.
+shows up first. All of it is what Arrsenal automates.
 
 One thing you bring yourself: access to the sources. That means an account with a
 usenet provider and indexer, or your torrent trackers of choice. Arrsenal wires the
@@ -150,10 +149,9 @@ installs: `sudo arrsenal --yes --apps sonarr,radarr,... --admin-pass ...`
 | [Seerr](https://docs.seerr.dev) | Requests — works with Jellyfin, Plex and Emby |
 | [Homepage](https://gethomepage.dev) | Dashboard, widgets pre-wired |
 
-Jellyfin is the recommended media server because its hardware transcoding — using
-your GPU to convert video on the fly so it plays smoothly on any device — is free.
-Plex and Emby charge for the same feature, and the warnings appear right on the
-selection screen.
+Hardware transcoding — using your GPU to convert video on the fly so it plays
+smoothly on any device — is free in Jellyfin; Plex and Emby charge for it, and
+those warnings appear right on the selection screen.
 
 Two options during setup deserve a mention. qBittorrent can be routed through a
 [gluetun](https://github.com/qdm12/gluetun) WireGuard tunnel: it shares gluetun's
@@ -163,14 +161,17 @@ torrenting stops instead of leaking. And if your downloads and your library live
 different disks (a fast SSD for incoming files, a big array for the collection),
 Arrsenal supports that split — every app still sees one consistent `/data` layout.
 
-### TRaSH-guide quality profiles (new in v0.4)
+### TRaSH-guide quality profiles
 
 The [TRaSH Guides](https://trash-guides.info) are the community reference for making
 Sonarr and Radarr grab the *good* releases: quality profiles, custom format scores,
 size limits. Applying them by hand means hours of clicking. Arrsenal asks three
 questions instead — 1080p or 4K? Full-quality remuxes? Anime? — then syncs the
 matching profiles into Sonarr and Radarr via [Recyclarr](https://recyclarr.dev), and
-keeps them current on every re-run.
+keeps them current on every re-run. These profiles are the community's opinion, not
+a certification — Arrsenal re-syncs them every run (which is why the report marks
+them ↻ synced, and why hand-edits to the TRaSH-named profiles don't stick; your own
+profiles are never touched).
 
 ## Ground rules
 
@@ -190,9 +191,9 @@ keeps them current on every re-run.
   config collisions and offers remaps. Arrsenal wires only the apps it manages and
   won't reach into an install it doesn't own.
 - The arr apps store API keys in plaintext; that's how the ecosystem works. Arrsenal
-  keeps every secret-bearing file it writes readable by root only (mode `0600`) —
-  secrets never land in the world-readable compose or `.env` files — and it never
-  prints them, and phones home to nobody.
+  keeps every secret-bearing file it writes locked to mode `0600`, owned by the one
+  user that must read it, never prints a secret, and phones home to nobody; secrets
+  never land in the world-readable compose or `.env` files.
 - NVIDIA, Intel QuickSync, and AMD VAAPI GPUs are detected and configured through to
   Jellyfin's encoder settings. If the NVIDIA container toolkit is missing, Arrsenal
   prints the exact commands to install it. Kernel drivers are never touched; you get
@@ -222,6 +223,8 @@ install Docker yourself and you're Tier 2.
 | v0.2 | Auto-wiring through the apps' APIs | ✅ |
 | v0.3 | Media-server choice, VPN, `update`/`uninstall`, split storage, headless mode | ✅ |
 | v0.4 | TRaSH-guide quality profiles via Recyclarr | ✅ |
+| v0.5 | Field hardening: scrolling TUI + boot splash, Lidarr wiring, dashboard fixes | ✅ |
+| v0.6 | Seerr (the Overseerr/Jellyseerr merger) sets itself up | ✅ |
 | v1.0 | Stability: docs site, hardening, stable state schema | next |
 
 Architecture and design reasoning live in [docs/DESIGN.md](docs/DESIGN.md).
@@ -235,29 +238,28 @@ after the containers start, it talks to every app's API and connects them —
 Prowlarr to the arrs, the arrs to SABnzbd, root folders, authentication,
 Jellyfin's wizard and hardware transcoding, TRaSH quality profiles, the
 Seerr request page, the dashboard. You open a browser to a working system,
-not to nine setup wizards.
+not to a dozen setup wizards.
 
 ### Does it work with an existing Sonarr/Radarr/Jellyfin setup?
 
 Yes, carefully. Preflight detects port and container-name collisions and
 offers remaps, and any app whose configuration predates the run is
-*adopted*: arrsenal wires what was never set up (like an unfinished
-authentication screen) but never modifies settings you've made. Removing an
-app removes its container and keeps its config.
+*adopted*: Arrsenal wires what was never set up (like an unfinished
+authentication screen) but never modifies settings you've made.
 
 ### Which media server should I pick — Jellyfin, Plex, or Emby?
 
 Jellyfin is the recommendation because its hardware transcoding is free and
-arrsenal can configure it end-to-end, including the setup wizard, libraries,
-NVENC/QuickSync/VAAPI, and the Seerr request page. Plex and Emby install
-fine but keep their paid-feature and browser-login steps.
+Arrsenal configures it end-to-end: setup wizard, libraries, NVENC/QuickSync/VAAPI.
+The Seerr request page is set up automatically with Jellyfin **or** Emby; with
+Plex, Seerr's sign-in is browser OAuth, so its 2-minute wizard stays yours — and
+Plex and Emby keep their own in-browser server setup and paid transcoding tiers.
 
 ### Does it set up TRaSH Guides quality settings?
 
-Yes — answer three questions (1080p or 4K? remuxes? anime?) and the matching
-[TRaSH-guide](https://trash-guides.info) quality profiles, custom format
-scores, and size limits are synced into Sonarr and Radarr via
-[Recyclarr](https://recyclarr.dev), and kept current on every re-run.
+Yes — three questions (1080p or 4K? remuxes? anime?) and the profiles, custom
+format scores, and size limits are synced via Recyclarr. Details in
+[TRaSH-guide quality profiles](#trash-guide-quality-profiles).
 
 ### What does it run on?
 
