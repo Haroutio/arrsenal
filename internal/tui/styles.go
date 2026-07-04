@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // One small palette, defined once. Screens compose these; nobody invents
@@ -68,4 +69,31 @@ func helpBar(pairs ...string) string {
 		parts = append(parts, styleKey.Render(pairs[i])+" "+styleDim.Render(pairs[i+1]))
 	}
 	return "\n" + strings.Join(parts, styleFaint.Render("  ·  "))
+}
+
+// wrapText wraps prose to the terminal width with every line indented by
+// indent spaces. Bubble Tea clips overlong lines at the terminal edge —
+// the OS-disk storage warning reached a user cut off mid-sentence (field
+// report). Zero width means the terminal never reported a size: no wrap.
+func wrapText(width, indent int, s string) string {
+	pad := strings.Repeat(" ", indent)
+	if width <= 0 {
+		return pad + s
+	}
+	w := width - indent
+	if w < 20 {
+		w = 20
+	}
+	wrapped := lipgloss.NewStyle().Width(w).Render(s)
+	return pad + strings.ReplaceAll(wrapped, "\n", "\n"+pad)
+}
+
+// fitLine truncates one ROW to the terminal width with an ellipsis.
+// Menu rows truncate rather than wrap: a wrapped cursor row would break
+// the height-window line accounting.
+func fitLine(width int, s string) string {
+	if width <= 0 || lipgloss.Width(s) <= width {
+		return s
+	}
+	return ansi.Truncate(s, width-1, "…")
 }

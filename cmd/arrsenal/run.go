@@ -237,29 +237,36 @@ func interactiveFill(s *state.State, o *options) error {
 	// one already has the user's servers, or their deliberate absence.
 	if selectedID(s, "sabnzbd") && o.usenetProvider == "" {
 		if entries, err := os.ReadDir(filepath.Join(s.AppdataRoot, "sabnzbd")); err != nil || len(entries) == 0 {
-			if confirm("Add your usenet provider to SABnzbd now (Newshosting, Eweka, UsenetServer, Frugal, Easynews, or a hostname)?", false) {
+			question := "Add your usenet provider to SABnzbd now (Newshosting, Eweka, UsenetServer, Frugal, Easynews, or a hostname)?"
+			for confirm(question, false) {
+				// Many setups run more than one provider (a backup or a
+				// block account) — loop like the indexers do.
+				question = "Add another usenet provider (a backup or block account)?"
+				var provider, user, pass string
 				fmt.Print("Provider [newshosting]: ")
 				if line, err := stdinReader.ReadString('\n'); err == nil {
-					o.usenetProvider = strings.TrimSpace(line)
+					provider = strings.TrimSpace(line)
 				}
-				if o.usenetProvider == "" {
-					o.usenetProvider = "newshosting"
+				if provider == "" {
+					provider = "newshosting"
 				}
 				fmt.Print("Provider username: ")
 				if line, err := stdinReader.ReadString('\n'); err == nil {
-					o.usenetUser = strings.TrimSpace(line)
+					user = strings.TrimSpace(line)
 				}
 				fmt.Print("Provider password: ")
 				if pw, err := term.ReadPassword(int(os.Stdin.Fd())); err == nil {
-					o.usenetPass = string(pw)
+					pass = string(pw)
 				}
 				fmt.Println()
-				if o.usenetUser == "" || o.usenetPass == "" {
+				if user == "" || pass == "" {
 					// Never let a half-entered provider vanish silently — say
 					// so now, while the user is still at the keyboard.
-					fmt.Println("incomplete credentials — skipping the usenet provider (re-run arrsenal, or use SAB's web UI)")
-					o.usenetProvider, o.usenetUser, o.usenetPass = "", "", ""
+					fmt.Println("incomplete credentials — this provider was skipped")
+					continue
 				}
+				p := buildUsenetProvider(provider, user, pass, 0, 0)
+				o.usenetProviders = append(o.usenetProviders, p)
 				fmt.Println("note: the preset's port and connection count apply; --usenet-port / --usenet-connections override them")
 			}
 		}
@@ -269,7 +276,9 @@ func interactiveFill(s *state.State, o *options) error {
 	// Newznab — URL plus API key — and Prowlarr propagates them to every
 	// arr. Prowlarr validates on save, so typos surface in the report.
 	if selectedID(s, "prowlarr") && len(o.indexerNames) == 0 {
-		for confirm("Add a usenet indexer to Prowlarr now (most are Newznab: URL + API key)?", false) {
+		question := "Add a usenet indexer to Prowlarr now (most are Newznab: URL + API key)?"
+		for confirm(question, false) {
+			question = "Add another usenet indexer?"
 			var ix wire.NewznabIndexer
 			fmt.Print("Indexer name: ")
 			if line, err := stdinReader.ReadString('\n'); err == nil {
@@ -719,7 +728,7 @@ func buildSpec(s *state.State, o options, adopted map[string]bool) wire.Spec {
 		Owned:       owned,
 		AppdataRoot: s.AppdataRoot,
 		PUID:        s.PUID, PGID: s.PGID,
-		Usenet:   resolveUsenetProvider(o),
+		Usenet:   resolveUsenetProviders(o),
 		Indexers: resolveIndexers(o),
 		TRaSH:    trash, RecyclarrDir: recyclarrDir, RunRecyclarr: runRecyclarr,
 		AdminUser:    o.adminUser,
@@ -748,31 +757,48 @@ func buildSpec(s *state.State, o options, adopted map[string]bool) wire.Spec {
 	}
 }
 
-// resolveUsenetProvider turns the flag/prompt values into a server target:
-// a preset name fills everything, a bare hostname is a custom provider on
-// the standard TLS port. Nil when credentials are missing — the wiring
-// never registers a half-configured server.
+// buildUsenetProvider turns raw answers into a server target: a preset
+// name fills everything, a bare hostname is a custom provider on the
+// standard TLS port; explicit port/connections win when non-zero.
+func buildUsenetProvider(provider, user, pass string, port, connections int) wire.UsenetProvider {
+	p, ok := wire.UsenetPresets[strings.ToLower(strings.TrimSpace(provider))]
+	if !ok {
+		// The host doubles as the display name: "[[uswest.newsdemon.com]]"
+		// in SAB's server list beats an anonymous "[[Usenet]]".
+		p = wire.UsenetProvider{Name: strings.TrimSpace(provider), Host: strings.TrimSpace(provider),
+			Port: 563, SSL: true, Connections: 20}
+	}
+	if port != 0 {
+		p.Port = port
+	}
+	if connections != 0 {
+		p.Connections = connections
+	}
+	// Trim the username (a stray space in a copy-pasted flag value is
+	// noise); the password is taken exactly as given in both entry paths.
+	p.Username, p.Password = strings.TrimSpace(user), pass
+	return p
+}
+
+// resolveUsenetProvider is the FLAG path: nil when credentials are missing
+// — the wiring never registers a half-configured server (and
+// validateSourceFlags has already made that loud).
 func resolveUsenetProvider(o options) *wire.UsenetProvider {
 	if o.usenetProvider == "" || o.usenetUser == "" || o.usenetPass == "" {
 		return nil
 	}
-	p, ok := wire.UsenetPresets[strings.ToLower(strings.TrimSpace(o.usenetProvider))]
-	if !ok {
-		// The host doubles as the display name: "[[uswest.newsdemon.com]]"
-		// in SAB's server list beats an anonymous "[[Usenet]]".
-		p = wire.UsenetProvider{Name: strings.TrimSpace(o.usenetProvider), Host: strings.TrimSpace(o.usenetProvider),
-			Port: 563, SSL: true, Connections: 20}
-	}
-	if o.usenetPort != 0 {
-		p.Port = o.usenetPort
-	}
-	if o.usenetConnections != 0 {
-		p.Connections = o.usenetConnections
-	}
-	// Trim the username (a stray space in a copy-pasted flag value is
-	// noise); the password is taken exactly as given in both entry paths.
-	p.Username, p.Password = strings.TrimSpace(o.usenetUser), o.usenetPass
+	p := buildUsenetProvider(o.usenetProvider, o.usenetUser, o.usenetPass, o.usenetPort, o.usenetConnections)
 	return &p
+}
+
+// resolveUsenetProviders merges the interactively-entered providers (the
+// prompt loops — backup and block accounts are normal) with the flag one.
+func resolveUsenetProviders(o options) []wire.UsenetProvider {
+	out := append([]wire.UsenetProvider{}, o.usenetProviders...)
+	if p := resolveUsenetProvider(o); p != nil {
+		out = append(out, *p)
+	}
+	return out
 }
 
 // resolveIndexers merges the flag-supplied indexers (repeatable triples,

@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/Haroutio/arrsenal/internal/state"
+	"github.com/Haroutio/arrsenal/internal/wire"
 )
 
 func TestParseGPUAnswer(t *testing.T) {
@@ -56,5 +57,32 @@ func TestResolveUsenetProvider(t *testing.T) {
 		usenetPort: 119, usenetConnections: 8})
 	if p == nil || p.Port != 119 || p.Connections != 8 {
 		t.Fatalf("overrides not applied: %+v", p)
+	}
+}
+
+func TestResolveUsenetProvidersMergesPromptAndFlag(t *testing.T) {
+	// The prompt loops (backup and block accounts are normal); the flag
+	// path contributes one more.
+	o := options{
+		usenetProviders: []wire.UsenetProvider{
+			buildUsenetProvider("newshosting", "u1", "p1", 0, 0),
+			buildUsenetProvider("uswest.newsdemon.com", "u2", "p2", 0, 50),
+		},
+		usenetProvider: "eweka", usenetUser: "u3", usenetPass: "p3",
+	}
+	got := resolveUsenetProviders(o)
+	if len(got) != 3 {
+		t.Fatalf("want 3 providers, got %d: %+v", len(got), got)
+	}
+	if got[0].Host != "news.newshosting.com" || got[1].Host != "uswest.newsdemon.com" || got[2].Host != "news.eweka.nl" {
+		t.Fatalf("hosts wrong: %+v", got)
+	}
+	if got[1].Name != "uswest.newsdemon.com" || got[1].Connections != 50 {
+		t.Fatalf("custom provider shape wrong: %+v", got[1])
+	}
+
+	// No providers anywhere → empty, not nil-panic.
+	if got := resolveUsenetProviders(options{}); len(got) != 0 {
+		t.Fatalf("want none, got %+v", got)
 	}
 }

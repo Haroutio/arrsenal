@@ -17,6 +17,7 @@ type SelectModel struct {
 	cursor int
 	top    int // first visible row when the menu is taller than the terminal
 	height int // terminal height from WindowSizeMsg; 0 = unknown, render all
+	width  int // terminal width; rows truncate, warnings wrap
 	done   bool
 	quit   bool
 }
@@ -98,6 +99,7 @@ func (m SelectModel) Init() tea.Cmd { return nil }
 func (m SelectModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if size, ok := msg.(tea.WindowSizeMsg); ok {
 		m.height = size.Height
+		m.width = size.Width
 		m.scrollToCursor()
 		return m, nil
 	}
@@ -154,17 +156,22 @@ func (m SelectModel) rowLines(i int) []string {
 		box = styleSelected.Render("●")
 	}
 	// The name field pads to 12 BEFORE styling so ANSI codes don't skew
-	// the column alignment.
-	lines = append(lines, fmt.Sprintf("%s%s %s %s", cursor, box,
+	// the column alignment. Rows TRUNCATE at the terminal edge (an
+	// ellipsis, not a mid-word clip); wrapping a row would break the
+	// height-window line accounting.
+	lines = append(lines, fitLine(m.width, fmt.Sprintf("%s%s %s %s", cursor, box,
 		strings.Replace(fmt.Sprintf("%-12s", r.app.Name), r.app.Name, name, 1),
-		styleDim.Render(fmt.Sprintf("%s · port %d", r.app.Description, r.app.Web.Host))))
+		styleDim.Render(fmt.Sprintf("%s · port %d", r.app.Description, r.app.Web.Host)))))
 
+	// Warnings are prose the user must actually read — they WRAP, and the
+	// wrapped lines join the slice individually so the scroll budget
+	// counts them correctly.
 	for _, w := range r.app.Warnings {
-		lines = append(lines, "        "+styleWarn.Render("⚠ "+w))
+		lines = append(lines, strings.Split(styleWarn.Render(wrapText(m.width, 8, "⚠ "+w)), "\n")...)
 	}
 	if r.wasInstalled && !r.selected {
-		lines = append(lines, "        "+styleWarn.Render(
-			"will be removed — its config in appdata is preserved and reselecting brings it back intact"))
+		lines = append(lines, strings.Split(styleWarn.Render(wrapText(m.width, 8,
+			"will be removed — its config in appdata is preserved and reselecting brings it back intact")), "\n")...)
 	}
 	return lines
 }

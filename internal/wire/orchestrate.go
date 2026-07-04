@@ -26,9 +26,10 @@ type Spec struct {
 	// every re-run would strand a lane that failed once (audit finding).
 	Owned       map[string]bool
 	AppdataRoot string
-	// Usenet is the news server to register in SABnzbd (nil = none given).
-	// The single setting without which the whole stack downloads nothing.
-	Usenet *UsenetProvider
+	// Usenet lists the news servers to register in SABnzbd (empty = none
+	// given) — the setting without which the whole stack downloads
+	// nothing. Plural: backup providers and block accounts are normal.
+	Usenet []UsenetProvider
 	// Indexers are usenet indexers to register in Prowlarr (generic
 	// Newznab), from where they propagate to every arr.
 	Indexers []NewznabIndexer
@@ -152,8 +153,8 @@ func Orchestrate(ctx context.Context, spec Spec) []Result {
 		// client the user finishes later.
 		results = emit(results, steps...)
 		sabReady = !Failed(steps)
-		if spec.Usenet != nil {
-			results = emit(results, EnsureSABServer(ctx, sab, *spec.Usenet))
+		for _, p := range spec.Usenet {
+			results = emit(results, EnsureSABServer(ctx, sab, p))
 		}
 	}
 	_, qbitSelected := sel["qbittorrent"]

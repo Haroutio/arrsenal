@@ -20,6 +20,7 @@ type SettingsModel struct {
 	inputs []textinput.Model
 	labels []string
 	focus  int
+	width  int // terminal width from WindowSizeMsg; 0 = unknown, no wrap
 	err    string
 	done   bool
 	quit   bool
@@ -85,6 +86,10 @@ func (m SettingsModel) Init() tea.Cmd { return textinput.Blink }
 
 // UpdateWith drives the screen; the state is needed for full validation.
 func (m SettingsModel) UpdateWith(msg tea.Msg, s *state.State) (SettingsModel, tea.Cmd) {
+	if size, ok := msg.(tea.WindowSizeMsg); ok {
+		m.width = size.Width
+		return m, nil
+	}
 	if key, ok := msg.(tea.KeyMsg); ok {
 		switch key.String() {
 		case "ctrl+c", "esc":
@@ -132,7 +137,7 @@ func (m SettingsModel) View() string {
 		fmt.Fprintf(&b, "  %-9s %s\n", m.labels[i], in.View())
 	}
 	if m.err != "" {
-		b.WriteString("\n" + styleWarn.Render("✗ "+m.err) + "\n")
+		b.WriteString("\n" + styleWarn.Render(wrapText(m.width, 0, "✗ "+m.err)) + "\n")
 	}
 	b.WriteString(helpBar("tab", "next field", "enter", "continue", "esc", "quit"))
 	return b.String()

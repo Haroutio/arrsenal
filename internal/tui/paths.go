@@ -19,6 +19,7 @@ type PathsModel struct {
 	mounts    []preflight.MountInfo
 	inputs    []textinput.Model // 0 = data root, 1 = appdata root
 	focus     int
+	width     int // terminal width from WindowSizeMsg; 0 = unknown, no wrap
 	err       string
 	osWarn    string
 	confirmed bool // OS-disk warning acknowledged once shown
@@ -60,6 +61,10 @@ func (m PathsModel) Quit() bool { return m.quit }
 
 // UpdateWith drives the screen.
 func (m PathsModel) UpdateWith(msg tea.Msg, s *state.State) (PathsModel, tea.Cmd) {
+	if size, ok := msg.(tea.WindowSizeMsg); ok {
+		m.width = size.Width
+		return m, nil
+	}
 	if key, ok := msg.(tea.KeyMsg); ok {
 		switch key.String() {
 		case "ctrl+c", "esc":
@@ -130,7 +135,7 @@ func (m PathsModel) View() string {
 	fmt.Fprintf(&b, "  %-15s %s\n", "Downloads root", m.inputs[2].View())
 	if strings.TrimSpace(m.inputs[2].Value()) != "" &&
 		strings.TrimSpace(m.inputs[2].Value()) != strings.TrimSpace(m.inputs[0].Value()) {
-		b.WriteString("  " + styleDim.Render("split storage: downloads on their own disk — imports copy instead of hardlink (fine for an SSD-scratch setup)") + "\n")
+		b.WriteString(styleDim.Render(wrapText(m.width, 2, "split storage: downloads on their own disk — imports copy instead of hardlink (fine for an SSD-scratch setup)")) + "\n")
 	}
 
 	if len(m.mounts) > 0 {
@@ -145,10 +150,10 @@ func (m PathsModel) View() string {
 	}
 
 	if m.err != "" {
-		b.WriteString("\n" + styleWarn.Render("✗ "+m.err) + "\n")
+		b.WriteString("\n" + styleWarn.Render(wrapText(m.width, 0, "✗ "+m.err)) + "\n")
 	}
 	if m.osWarn != "" {
-		b.WriteString("\n" + styleWarn.Render("⚠ "+m.osWarn) + "\n")
+		b.WriteString("\n" + styleWarn.Render(wrapText(m.width, 0, "⚠ "+m.osWarn)) + "\n")
 	}
 	b.WriteString(helpBar("tab", "switch field", "enter", "continue", "esc", "quit"))
 	return b.String()
