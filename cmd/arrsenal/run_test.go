@@ -44,9 +44,10 @@ func TestResolveUsenetProvider(t *testing.T) {
 		t.Fatalf("preset not applied: %+v", p)
 	}
 
-	// A hostname is a custom provider on the standard TLS port.
+	// A hostname is a custom provider on the standard TLS port, named
+	// after its host in SAB's server list.
 	p = resolveUsenetProvider(options{usenetProvider: "news.example.net", usenetUser: "u", usenetPass: "pw"})
-	if p == nil || p.Host != "news.example.net" || p.Port != 563 || p.Connections != 20 {
+	if p == nil || p.Host != "news.example.net" || p.Port != 563 || p.Connections != 20 || p.Name != "news.example.net" {
 		t.Fatalf("custom host not applied: %+v", p)
 	}
 

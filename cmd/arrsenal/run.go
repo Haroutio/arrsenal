@@ -687,7 +687,9 @@ func resolveUsenetProvider(o options) *wire.UsenetProvider {
 	}
 	p, ok := wire.UsenetPresets[strings.ToLower(strings.TrimSpace(o.usenetProvider))]
 	if !ok {
-		p = wire.UsenetProvider{Name: "Usenet", Host: strings.TrimSpace(o.usenetProvider),
+		// The host doubles as the display name: "[[uswest.newsdemon.com]]"
+		// in SAB's server list beats an anonymous "[[Usenet]]".
+		p = wire.UsenetProvider{Name: strings.TrimSpace(o.usenetProvider), Host: strings.TrimSpace(o.usenetProvider),
 			Port: 563, SSL: true, Connections: 20}
 	}
 	if o.usenetPort != 0 {
