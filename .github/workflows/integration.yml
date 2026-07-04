@@ -90,6 +90,12 @@ jobs:
             'select(.authenticationMethod=="forms")' "lidarr auth is forms (api v1)"
           echo "usenet provider registered in SAB:"
           grep -E '^host = news.example.test' /tmp/arrtest/appdata/sabnzbd/sabnzbd.ini
+          assert_json http://localhost:8989/api/v3/config/naming "X-Api-Key: $SONK" \
+            'select(.renameEpisodes==true and (.standardEpisodeFormat | contains("Custom Formats")))' \
+            "sonarr renames with the TRaSH naming scheme"
+          assert_json http://localhost:8989/api/v3/config/mediamanagement "X-Api-Key: $SONK" \
+            'select(.downloadPropersAndRepacks=="doNotPrefer" and .enableMediaInfo==true)' \
+            "sonarr media management defaults applied"
       - name: re-run is idempotent — everything comes back existed, nothing re-wired
         run: |
           ./arrsenal --yes --gpu none --admin-user ci --admin-pass ci-wiring-pass \

@@ -270,6 +270,25 @@ func Orchestrate(ctx context.Context, spec Spec) []Result {
 		results = append(results, runTRaSH(spec, keys)...)
 	}
 
+	// 6.6 TRaSH naming + media management (issue #105), riding the same
+	// consent as the profiles. Fresh arrs only — adopted naming is the
+	// user's, and renaming a curated library out from under someone is the
+	// kind of surprise this tool exists to prevent.
+	if spec.TRaSH != nil {
+		if a, ok := sel["sonarr"]; ok && keys["sonarr"] != "" {
+			c := arrClient("sonarr")
+			results = append(results,
+				EnsureSonarrNaming(ctx, c, spec.Adopted["sonarr"]),
+				EnsureMediaManagement(ctx, c, a.APIBase, a.Name, spec.Adopted["sonarr"]))
+		}
+		if a, ok := sel["radarr"]; ok && keys["radarr"] != "" {
+			c := arrClient("radarr")
+			results = append(results,
+				EnsureRadarrNaming(ctx, c, spec.Adopted["radarr"]),
+				EnsureMediaManagement(ctx, c, a.APIBase, a.Name, spec.Adopted["radarr"]))
+		}
+	}
+
 	// 7. Seerr, best effort, last — after the Jellyfin lane, whose finished
 	// wizard the sign-in authenticates against.
 	if _, ok := sel["jellyseerr"]; ok {
