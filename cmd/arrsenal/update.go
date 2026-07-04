@@ -3,7 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
-	"strings"
+	"slices"
 	"time"
 
 	"github.com/Haroutio/arrsenal/internal/dockerx"
@@ -29,26 +29,19 @@ func runUpdate(o options) error {
 	}
 
 	fmt.Println("pulling image updates…")
-	out, err := docker.Pull(o.artifactsDir)
+	images, err := docker.ComposeImages(o.artifactsDir)
 	if err != nil {
 		return err
 	}
-	// Compose's own progress is noisy; keep the informative tail lines.
-	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
-		line = strings.TrimSpace(line)
-		if strings.Contains(line, "Pulled") || strings.Contains(line, "Downloaded") {
-			fmt.Println(" ", line)
-		}
-	}
 	// When TRaSH is enabled recyclarr is a compose service (issue #106) and
-	// the pull above covers it — but only in compose files generated since
-	// then. Artifacts from an older arrsenal predate the service, so the
-	// explicit pull stays for them and for the wiring one-shot (audit
-	// finding).
-	if s.TRaSH.Enabled {
-		if err := docker.PullImage(quality.Image); err != nil {
-			return err
-		}
+	// the list above covers it — but only in compose files generated since
+	// then. Artifacts from an older arrsenal predate the service, and the
+	// wiring one-shot uses the image too (audit finding).
+	if s.TRaSH.Enabled && !slices.Contains(images, quality.Image) {
+		images = append(images, quality.Image)
+	}
+	if err := pullImages(docker, images); err != nil {
+		return err
 	}
 
 	fmt.Println("reconciling containers…")
