@@ -24,8 +24,9 @@ questions, and land on a fully wired system:
 
 Here's the full report from that run. A ✓ is a connection Arrsenal made, a ●
 is one that already existed and was left alone, and a ↻ is one it re-syncs on
-every run — the [TRaSH quality profiles](#trash-guide-quality-profiles). On a
-box with a GPU there's one more line: `✓ Jellyfin hardware transcoding (nvenc)`.
+every run — the [TRaSH quality profiles](#trash-guide-quality-profiles). This
+demo ran without a GPU; with one, Jellyfin's hardware transcoding gets configured
+and reported too.
 
 ```
 Wiring report:
@@ -93,9 +94,8 @@ folders, hostname whitelists — and then the longest part, building out quality
 profiles and custom format scores so the arrs grab good releases instead of whatever
 shows up first. All of it is what Arrsenal automates.
 
-One thing you bring yourself: access to the sources. That means an account with a
-usenet provider and indexer, or your torrent trackers of choice. Arrsenal wires the
-plumbing; what flows through it is up to you.
+One thing you bring yourself: access to the sources — an account with a usenet
+provider and indexer, or your torrent trackers of choice.
 
 ## Install
 
@@ -109,9 +109,8 @@ curl -fsSL https://github.com/Haroutio/arrsenal/raw/main/install.sh | bash
 
 The script detects your distro, offers to install Docker if it's missing, downloads
 the `arrsenal` binary for your architecture, verifies its SHA-256 checksum, and hands
-over to an interactive terminal UI that walks you through every choice. It's not meant
-to be piped into sudo — it asks for elevation only at the steps that need it, and each
-one says why.
+over to an interactive terminal UI that walks you through every choice. It never
+asks to be piped into sudo; it requests elevation only for the steps that need it.
 
 If you'd rather read before you run:
 
@@ -122,8 +121,7 @@ bash install.sh
 ```
 
 When it finishes, it prints the address of every app it installed — start with
-Homepage, which links to all of them. Your admin credentials are the ones you chose
-during setup.
+Homepage, which links to all of them.
 
 Re-run `sudo arrsenal` any time to add or remove apps. Your answers persist in
 `/opt/arrsenal/arrsenal.yaml`, Docker Compose reconciles the difference, and the
@@ -153,13 +151,14 @@ installs: `sudo arrsenal --yes --apps sonarr,radarr,... --admin-pass ...`
 Hardware transcoding — using your GPU to convert video on the fly so it plays
 smoothly on any device — is free in Jellyfin; Plex and Emby charge for it.
 
-Two options during setup deserve a mention. qBittorrent can be routed through a
-[gluetun](https://github.com/qdm12/gluetun) WireGuard tunnel: it shares gluetun's
-network namespace, so torrent traffic can only leave through gluetun, and gluetun's
-built-in kill switch drops everything that isn't the tunnel. If the VPN goes down,
-torrenting stops instead of leaking. And if your downloads and your library live on
-different disks (a fast SSD for incoming files, a big array for the collection),
-Arrsenal supports that split — every app still sees one consistent `/data` layout.
+qBittorrent can be routed through a [gluetun](https://github.com/qdm12/gluetun)
+WireGuard tunnel. It shares gluetun's network namespace, so torrent traffic can only
+leave through the tunnel, and gluetun's built-in kill switch drops everything else —
+if the VPN goes down, torrenting stops instead of leaking.
+
+If your downloads and your library live on different disks (a fast SSD for incoming
+files, a big array for the collection), Arrsenal supports that split — every app
+still sees one consistent `/data` layout.
 
 ### TRaSH-guide quality profiles
 
@@ -237,8 +236,7 @@ No — the compose file is the easy 10%. Arrsenal's point is the other 90%:
 after the containers start, it talks to every app's API and connects them —
 Prowlarr to the arrs, the arrs to SABnzbd, root folders, authentication,
 Jellyfin's wizard and hardware transcoding, TRaSH quality profiles, the
-Seerr request page, the dashboard. You open a browser to a working system,
-not to a dozen setup wizards.
+Seerr request page, the dashboard.
 
 ### Does it work with an existing Sonarr/Radarr/Jellyfin setup?
 
@@ -249,11 +247,11 @@ authentication screen) but never modifies settings you've made.
 
 ### Which media server should I pick — Jellyfin, Plex, or Emby?
 
-Jellyfin is the recommendation because its hardware transcoding is free and
-Arrsenal configures it end-to-end: setup wizard, libraries, NVENC/QuickSync/VAAPI.
-The Seerr request page is set up automatically with Jellyfin **or** Emby; with
-Plex, Seerr's sign-in is browser OAuth, so its 2-minute wizard stays yours — and
-Plex and Emby keep their own in-browser server setup and paid transcoding tiers.
+Jellyfin is the recommendation: its hardware transcoding is free and Arrsenal
+configures it end-to-end — setup wizard, libraries, NVENC/QuickSync/VAAPI. Seerr
+is also set up automatically with Jellyfin or Emby. Plex's sign-in is browser
+OAuth, which can't be automated, so with Plex you finish Seerr's short wizard
+yourself.
 
 ### Does it set up TRaSH Guides quality settings?
 
