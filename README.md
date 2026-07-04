@@ -47,6 +47,11 @@ Jellyfin greets you with a first-run wizard. Arrsenal does that part too. It tal
 each app's API after startup and wires the whole thing together, so the first time you
 open a browser, everything already works.
 
+Here is the whole thing, start to finish — boot, pick the stack, answer a few
+questions, and land on a fully wired system:
+
+![A complete arrsenal install: the boot splash, app selection, TRaSH quality questions, and the final wiring report — 29 connections, zero manual configuration](docs/assets/demo.gif)
+
 A fresh install ends like this (TRaSH is a community guide, not a verdict — more on
 that [below](#trash-guide-quality-profiles-new-in-v04)):
 
