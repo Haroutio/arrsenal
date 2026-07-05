@@ -45,6 +45,14 @@ func TestResolveUsenetProvider(t *testing.T) {
 		t.Fatalf("preset not applied: %+v", p)
 	}
 
+	// A preset's server ADDRESS lands on the same preset — the prompt asks
+	// for the address, and generic defaults would waste the provider's
+	// tuned connection count.
+	p = resolveUsenetProvider(options{usenetProvider: "news.newshosting.com", usenetUser: "u", usenetPass: "pw"})
+	if p == nil || p.Name != "Newshosting" || p.Connections != 30 {
+		t.Fatalf("preset host not matched: %+v", p)
+	}
+
 	// A hostname is a custom provider on the standard TLS port, named
 	// after its host in SAB's server list.
 	p = resolveUsenetProvider(options{usenetProvider: "news.example.net", usenetUser: "u", usenetPass: "pw"})

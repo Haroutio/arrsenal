@@ -244,21 +244,21 @@ func interactiveFill(s *state.State, o *options) error {
 				question = "Add another usenet provider (a backup or block account)?"
 				var provider, user, pass string
 				for {
-					fmt.Print("Provider — preset name or server hostname (e.g. news.newsdemon.com) [newshosting]: ")
+					fmt.Print("Provider server address [news.newshosting.com]: ")
 					if line, err := stdinReader.ReadString('\n'); err == nil {
 						provider = strings.TrimSpace(line)
 					}
 					if provider == "" {
-						provider = "newshosting"
+						provider = "news.newshosting.com"
 					}
-					// A typo'd or unknown name must not silently become a
-					// bogus "hostname" — SAB would register a server that
-					// can never connect (field report). Presets have no
-					// dot; real server hostnames always do.
+					// An address it is — a bare word must not silently
+					// become a bogus "hostname" SAB can never connect to
+					// (field report). Known preset names still work as a
+					// courtesy; anything else needs a dot in it.
 					if _, ok := wire.UsenetPresets[strings.ToLower(provider)]; ok || strings.Contains(provider, ".") {
 						break
 					}
-					fmt.Printf("%q is not a preset (newshosting, eweka, usenetserver, frugal, easynews) — enter one of those, or your provider's full server address like news.newsdemon.com\n", provider)
+					fmt.Printf("%q doesn't look like a server address — enter your provider's full address, like news.newshosting.com or news.eweka.nl\n", provider)
 					provider = ""
 				}
 				fmt.Print("Provider username: ")
@@ -769,14 +769,26 @@ func buildSpec(s *state.State, o options, adopted map[string]bool) wire.Spec {
 }
 
 // buildUsenetProvider turns raw answers into a server target: a preset
-// name fills everything, a bare hostname is a custom provider on the
-// standard TLS port; explicit port/connections win when non-zero.
+// name OR a preset's server address fills everything (the prompt asks for
+// the address, so news.newshosting.com must land on the Newshosting preset
+// with its tuned connection count), any other hostname is a custom
+// provider on the standard TLS port; explicit port/connections win when
+// non-zero.
 func buildUsenetProvider(provider, user, pass string, port, connections int) wire.UsenetProvider {
-	p, ok := wire.UsenetPresets[strings.ToLower(strings.TrimSpace(provider))]
+	in := strings.TrimSpace(provider)
+	p, ok := wire.UsenetPresets[strings.ToLower(in)]
+	if !ok {
+		for _, preset := range wire.UsenetPresets {
+			if strings.EqualFold(preset.Host, in) {
+				p, ok = preset, true
+				break
+			}
+		}
+	}
 	if !ok {
 		// The host doubles as the display name: "[[news.myprovider.example]]"
 		// in SAB's server list beats an anonymous "[[Usenet]]".
-		p = wire.UsenetProvider{Name: strings.TrimSpace(provider), Host: strings.TrimSpace(provider),
+		p = wire.UsenetProvider{Name: in, Host: in,
 			Port: 563, SSL: true, Connections: 20}
 	}
 	if port != 0 {

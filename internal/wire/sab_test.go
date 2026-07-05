@@ -210,6 +210,46 @@ func TestEnsureSABHardeningAppliesTRaSHBlocklist(t *testing.T) {
 	}
 }
 
+func TestEnsureSABAuth(t *testing.T) {
+	// Factory state (no UI credential at all) gets the admin credential —
+	// SAB's port is on the LAN and an open UI can run scripts.
+	mux := http.NewServeMux()
+	var sets atomic.Int32
+	var log []string
+	existing := `"",""`
+	mux.HandleFunc("/api", func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		switch q.Get("mode") {
+		case "get_config":
+			parts := strings.SplitN(existing, ",", 2)
+			_, _ = w.Write([]byte(`{"config":{"misc":{"username":` + parts[0] + `,"password":` + parts[1] + `}}}`))
+		case "set_config":
+			sets.Add(1)
+			log = append(log, q.Get("keyword")+"="+q.Get("value"))
+			_, _ = w.Write([]byte(`{"config":{}}`))
+		}
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	c := NewSABClient(srv.URL, "k")
+	c.backoff = time.Millisecond
+	r := EnsureSABAuth(context.Background(), c, "adminuser", "ui-pass-SECRET")
+	if r.Outcome != OutcomeWired || sets.Load() != 2 {
+		t.Fatalf("factory SAB must get the credential: %+v sets=%d %v", r, sets.Load(), log)
+	}
+	if !strings.Contains(strings.Join(log, "|"), "username=adminuser") {
+		t.Fatalf("username not set: %v", log)
+	}
+
+	// An existing credential is the user's.
+	existing = `"someone","**********"`
+	sets.Store(0)
+	if r := EnsureSABAuth(context.Background(), c, "adminuser", "other"); r.Outcome != OutcomeExisted || sets.Load() != 0 {
+		t.Fatalf("existing credential must be untouched: %+v sets=%d", r, sets.Load())
+	}
+}
+
 func TestEnsureSABHardeningNeverTouchesAnExistingList(t *testing.T) {
 	var sets atomic.Int32
 	var log []string

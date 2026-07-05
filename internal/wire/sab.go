@@ -78,6 +78,44 @@ func EnsureSABHardening(ctx context.Context, sab *Client) Result {
 		Detail: "TRaSH blocklist (exe, js, vbs, …) fails matching jobs; direct+flat unpack on"}
 }
 
+// EnsureSABAuth puts the admin credential on SABnzbd's web UI. SAB ships
+// with NO UI authentication and its port is published to the LAN — anyone
+// who can reach it can reconfigure SAB, including post-processing scripts
+// (effectively code execution on the box). Same policy as the arrs'
+// EnsureAuth: factory state (both fields empty) is completed, an existing
+// credential is the user's and is never touched. API-key access (the
+// arrs, dashboard widgets) is unaffected by UI credentials.
+func EnsureSABAuth(ctx context.Context, sab *Client, username, password string) Result {
+	conn := "SABnzbd ← admin credential"
+	sab.WithRedaction(password)
+
+	var cfg struct {
+		Config struct {
+			Misc struct {
+				Username string `json:"username"`
+				Password string `json:"password"`
+			} `json:"misc"`
+		} `json:"config"`
+	}
+	if err := sab.GetJSON(ctx, sabPath(sab.key, "get_config", url.Values{"section": {"misc"}}), &cfg); err != nil {
+		return Result{Connection: conn, Outcome: OutcomeFailed,
+			Detail: fmt.Sprintf("reading SABnzbd config: %v", err)}
+	}
+	if cfg.Config.Misc.Username != "" || cfg.Config.Misc.Password != "" {
+		return Result{Connection: conn, Outcome: OutcomeExisted}
+	}
+
+	for _, kv := range [][2]string{{"username", username}, {"password", password}} {
+		err := sab.GetJSON(ctx, sabPath(sab.key, "set_config",
+			url.Values{"section": {"misc"}, "keyword": {kv[0]}, "value": {kv[1]}}), nil)
+		if err != nil {
+			return Result{Connection: conn, Outcome: OutcomeFailed,
+				Detail: fmt.Sprintf("setting %s: %v", kv[0], err)}
+		}
+	}
+	return Result{Connection: conn, Outcome: OutcomeWired}
+}
+
 // EnsureSABFolders points SABnzbd's download directories at the shared data
 // tree — but ONLY when they still sit at SAB's stock defaults. A fresh
 // install downloads into its own config volume (Downloads/…), which

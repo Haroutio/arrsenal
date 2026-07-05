@@ -101,7 +101,9 @@ func TestEnsureRadarrNamingApplies(t *testing.T) {
 func TestEnsureMediaManagementApplies(t *testing.T) {
 	f := &fakeArrConfig{path: "/api/v3/config/mediamanagement", current: map[string]any{
 		"id": 1, "downloadPropersAndRepacks": "preferAndUpgrade", "enableMediaInfo": false,
-		"recycleBin": "/data/recycle", // unmanaged — must survive
+		"importExtraFiles": false, "extraFileExtensions": "",
+		"episodeTitleRequired": "always",        // sonarr-only key → the sonarr branch
+		"recycleBin":           "/data/recycle", // unmanaged — must survive
 	}}
 	srv := f.server()
 	defer srv.Close()
@@ -113,8 +115,28 @@ func TestEnsureMediaManagementApplies(t *testing.T) {
 	if f.lastPut["downloadPropersAndRepacks"] != "doNotPrefer" || f.lastPut["enableMediaInfo"] != true {
 		t.Fatalf("defaults not applied: %+v", f.lastPut)
 	}
+	if f.lastPut["importExtraFiles"] != true || f.lastPut["extraFileExtensions"] != "srt" {
+		t.Fatalf("sidecar-subtitle import not applied: %+v", f.lastPut)
+	}
+	if f.lastPut["episodeTitleRequired"] != "bulkSeasonReleases" {
+		t.Fatalf("episode-title stall guard not applied: %+v", f.lastPut)
+	}
 	if f.lastPut["recycleBin"] != "/data/recycle" {
 		t.Fatalf("unmanaged field lost in roundtrip: %+v", f.lastPut)
+	}
+
+	// Radarr has no episodeTitleRequired key — the sonarr branch must not
+	// invent one.
+	rf := &fakeArrConfig{path: "/api/v3/config/mediamanagement", current: map[string]any{
+		"id": 1, "downloadPropersAndRepacks": "preferAndUpgrade", "enableMediaInfo": false,
+	}}
+	rsrv := rf.server()
+	defer rsrv.Close()
+	if r := EnsureMediaManagement(context.Background(), wireClient(rsrv.URL), "/api/v3", "Radarr", false); r.Outcome != OutcomeWired {
+		t.Fatalf("radarr path: %+v", r)
+	}
+	if _, invented := rf.lastPut["episodeTitleRequired"]; invented {
+		t.Fatalf("episodeTitleRequired invented on radarr: %+v", rf.lastPut)
 	}
 
 	// Second pass over the now-correct config: no rewrite.
