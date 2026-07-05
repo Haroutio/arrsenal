@@ -9,8 +9,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// splashTickInterval is the single animation clock. 60ms ≈ the design's
-// cadence once its per-effect timers are folded into one ticker.
+// splashTickInterval is the single animation clock (~60ms), one ticker
+// driving every effect.
 const splashTickInterval = 60 * time.Millisecond
 
 // SplashRow is one line of the boot readout — a real probe result, not
@@ -21,8 +21,8 @@ type SplashRow struct {
 	OK    bool
 }
 
-// SplashModel is the boot sequence, ported from the Claude Design splash:
-// ambient strip → wordmark reveals column-by-column → the galleon rises
+// SplashModel is the boot sequence: ambient strip → wordmark reveals
+// column-by-column → the galleon rises
 // from the waterline (when it fits — see shipFits) → version and tagline
 // type in → the system check streams → "press any key to weigh anchor".
 // Any key skips straight to the finished frame; a key on the finished

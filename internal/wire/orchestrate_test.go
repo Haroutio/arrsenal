@@ -73,7 +73,7 @@ func TestOrchestrateSonarrOnly(t *testing.T) {
 		Apps:        []registry.App{sonarr},
 		Adopted:     map[string]bool{},
 		AppdataRoot: root,
-		AdminUser:   "harout", AdminPass: "pw-SECRET",
+		AdminUser:   "adminuser", AdminPass: "pw-SECRET",
 		Access:     func(string) string { return srv.URL },
 		KeyTimeout: 2 * time.Second,
 	})

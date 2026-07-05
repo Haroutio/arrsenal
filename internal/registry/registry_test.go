@@ -40,8 +40,8 @@ func TestByID(t *testing.T) {
 	if _, ok := ByID("readarr"); ok {
 		t.Fatal("readarr must not be in the registry — retired upstream (DESIGN §3)")
 	}
-	if _, ok := ByID("pihole"); ok {
-		t.Fatal("pihole must not be in the registry — not media automation (DESIGN §3)")
+	if _, ok := ByID("not-an-app"); ok {
+		t.Fatal("unknown IDs must not resolve")
 	}
 }
 

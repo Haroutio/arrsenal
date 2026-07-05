@@ -77,7 +77,7 @@ func seerrTarget(url string) SeerrTarget {
 	return SeerrTarget{
 		URL: url, HostAccessURL: "http://host:5055",
 		ServerType: "jellyfin", ServerHost: "jellyfin", ServerPort: 8096,
-		AdminUser: "harout", AdminPass: "seerr-pass-SECRET",
+		AdminUser: "adminuser", AdminPass: "seerr-pass-SECRET",
 		Sonarr: &SeerrArr{Name: "Sonarr", Host: "sonarr", Port: 8989, APIKey: "sonk",
 			ProfileID: 7, ProfileName: "WEB-1080p", RootFolder: "/data/media/tv"},
 		Radarr: &SeerrArr{Name: "Radarr", Host: "radarr", Port: 7878, APIKey: "radk",

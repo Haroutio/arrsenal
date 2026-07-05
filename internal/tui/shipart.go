@@ -1,10 +1,8 @@
 package tui
 
-// The grand galleon, verbatim from the Claude Design splash (91 cols x 26
-// rows). Shown only when the terminal fits it UNCUT: trimming to 64 cols
-// would destroy the stern rigging (~11% of the ink), and the user ruled —
-// the ship as it is, or no ship at all. Generated from the design export;
-// edit the design, not this file.
+// The grand galleon (91 cols x 26 rows). Shown only when the terminal fits
+// it UNCUT: trimming to 64 cols would destroy the stern rigging (~11% of
+// the ink) — the ship as it is, or no ship at all.
 var shipArt = []string{
 	"                                  .                   .",
 	"                              _..-''\"\"\"\\          _.--'\"\"\"\\",

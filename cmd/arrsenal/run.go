@@ -763,7 +763,7 @@ func buildSpec(s *state.State, o options, adopted map[string]bool) wire.Spec {
 func buildUsenetProvider(provider, user, pass string, port, connections int) wire.UsenetProvider {
 	p, ok := wire.UsenetPresets[strings.ToLower(strings.TrimSpace(provider))]
 	if !ok {
-		// The host doubles as the display name: "[[uswest.newsdemon.com]]"
+		// The host doubles as the display name: "[[news.myprovider.example]]"
 		// in SAB's server list beats an anonymous "[[Usenet]]".
 		p = wire.UsenetProvider{Name: strings.TrimSpace(provider), Host: strings.TrimSpace(provider),
 			Port: 563, SSL: true, Connections: 20}

@@ -66,7 +66,7 @@ func TestResolveUsenetProvidersMergesPromptAndFlag(t *testing.T) {
 	o := options{
 		usenetProviders: []wire.UsenetProvider{
 			buildUsenetProvider("newshosting", "u1", "p1", 0, 0),
-			buildUsenetProvider("uswest.newsdemon.com", "u2", "p2", 0, 50),
+			buildUsenetProvider("news.customhost.example", "u2", "p2", 0, 50),
 		},
 		usenetProvider: "eweka", usenetUser: "u3", usenetPass: "p3",
 	}
@@ -74,10 +74,10 @@ func TestResolveUsenetProvidersMergesPromptAndFlag(t *testing.T) {
 	if len(got) != 3 {
 		t.Fatalf("want 3 providers, got %d: %+v", len(got), got)
 	}
-	if got[0].Host != "news.newshosting.com" || got[1].Host != "uswest.newsdemon.com" || got[2].Host != "news.eweka.nl" {
+	if got[0].Host != "news.newshosting.com" || got[1].Host != "news.customhost.example" || got[2].Host != "news.eweka.nl" {
 		t.Fatalf("hosts wrong: %+v", got)
 	}
-	if got[1].Name != "uswest.newsdemon.com" || got[1].Connections != 50 {
+	if got[1].Name != "news.customhost.example" || got[1].Connections != 50 {
 		t.Fatalf("custom provider shape wrong: %+v", got[1])
 	}
 

@@ -57,14 +57,14 @@ func TestEnsureAuthConfiguresFreshApps(t *testing.T) {
 	srv := f.server(t)
 	defer srv.Close()
 
-	r := EnsureAuth(context.Background(), authClient(srv.URL), "Sonarr", "/api/v3", "harout", adminPass, false)
+	r := EnsureAuth(context.Background(), authClient(srv.URL), "Sonarr", "/api/v3", "adminuser", adminPass, false)
 	if r.Outcome != OutcomeWired {
 		t.Fatalf("fresh app must be wired: %+v", r)
 	}
 	if f.puts.Load() != 1 {
 		t.Fatalf("want exactly one write, got %d", f.puts.Load())
 	}
-	if f.lastPut["authenticationMethod"] != "forms" || f.lastPut["username"] != "harout" ||
+	if f.lastPut["authenticationMethod"] != "forms" || f.lastPut["username"] != "adminuser" ||
 		f.lastPut["password"] != adminPass || f.lastPut["passwordConfirmation"] != adminPass {
 		t.Fatalf("auth fields wrong: %+v", f.lastPut)
 	}
@@ -78,7 +78,7 @@ func TestEnsureAuthLeavesConfiguredAppsAlone(t *testing.T) {
 	srv := f.server(t)
 	defer srv.Close()
 
-	r := EnsureAuth(context.Background(), authClient(srv.URL), "Sonarr", "/api/v3", "harout", adminPass, false)
+	r := EnsureAuth(context.Background(), authClient(srv.URL), "Sonarr", "/api/v3", "adminuser", adminPass, false)
 	if r.Outcome != OutcomeExisted || f.puts.Load() != 0 {
 		t.Fatalf("already-authed app must see zero writes: %+v puts=%d", r, f.puts.Load())
 	}
@@ -88,17 +88,17 @@ func TestEnsureAuthCompletesNeverConfiguredAdoptedApps(t *testing.T) {
 	// The field case, round two: method "none" is NOT a choice — the modern
 	// arrs don't offer it in the UI; it means the first-run auth screen was
 	// never completed and the app nags forever. The original adoption rule
-	// preserved that nag on the user's real box; completing it clobbers
+	// preserved that nag on real adopted installs; completing it clobbers
 	// nothing.
 	f := newFakeArr("none")
 	srv := f.server(t)
 	defer srv.Close()
 
-	r := EnsureAuth(context.Background(), authClient(srv.URL), "Sonarr", "/api/v3", "harout", adminPass, true)
+	r := EnsureAuth(context.Background(), authClient(srv.URL), "Sonarr", "/api/v3", "adminuser", adminPass, true)
 	if r.Outcome != OutcomeWired || f.puts.Load() != 1 {
 		t.Fatalf("adopted never-configured auth must be completed: %+v puts=%d", r, f.puts.Load())
 	}
-	if f.lastPut["authenticationMethod"] != "forms" || f.lastPut["username"] != "harout" {
+	if f.lastPut["authenticationMethod"] != "forms" || f.lastPut["username"] != "adminuser" {
 		t.Fatalf("auth fields wrong: %+v", f.lastPut)
 	}
 	if !strings.Contains(r.Detail, "adopted") {
@@ -113,7 +113,7 @@ func TestEnsureAuthNeverTouchesConfiguredAdoptedApps(t *testing.T) {
 	srv := f.server(t)
 	defer srv.Close()
 
-	r := EnsureAuth(context.Background(), authClient(srv.URL), "Sonarr", "/api/v3", "harout", adminPass, true)
+	r := EnsureAuth(context.Background(), authClient(srv.URL), "Sonarr", "/api/v3", "adminuser", adminPass, true)
 	if r.Outcome != OutcomeExisted || f.puts.Load() != 0 {
 		t.Fatalf("adopted configured auth must see zero writes: %+v puts=%d", r, f.puts.Load())
 	}
@@ -133,7 +133,7 @@ func TestEnsureAuthFailureNeverLeaksThePassword(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	r := EnsureAuth(context.Background(), authClient(srv.URL), "Sonarr", "/api/v3", "harout", adminPass, false)
+	r := EnsureAuth(context.Background(), authClient(srv.URL), "Sonarr", "/api/v3", "adminuser", adminPass, false)
 	if r.Outcome != OutcomeFailed {
 		t.Fatalf("expected failure: %+v", r)
 	}

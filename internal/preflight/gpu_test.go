@@ -69,8 +69,8 @@ func TestNoGPUAnywhereSaysSo(t *testing.T) {
 }
 
 func TestDeadNvidiaDriverIsDiagnosedFromThePCIBus(t *testing.T) {
-	// The mediasrv case: RTX passed through (0x10de on the bus, QEMU's
-	// 0x1234 display too), nvidia-smi dead, no render nodes.
+	// The passed-through-GPU case: NVIDIA on the bus (0x10de, next to a
+	// hypervisor's 0x1234 display), nvidia-smi dead, no render nodes.
 	probes := withPCI(gpuProbes(false, false), "0x1234", "0x10de")
 	got := DetectGPU(probes)
 	if got.Proposal != state.GPUNone {

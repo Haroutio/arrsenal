@@ -83,7 +83,7 @@ func TestLiveJellyfin(t *testing.T) {
 	defer cancel()
 
 	if adoptedURL != "" {
-		// The user's real server: wizard long done → exactly one Existed,
+		// An adopted server (wizard long done): exactly one Existed,
 		// nothing touched.
 		results, _ := EnsureJellyfin(ctx, JellyfinTarget{URL: adoptedURL, AdminUser: "x", AdminPass: "x"})
 		t.Logf("adopted: %+v", results)

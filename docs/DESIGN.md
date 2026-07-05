@@ -75,8 +75,8 @@ Deliberate cuts:
 
 - **Readarr** — retired upstream (2025); its metadata backend was already broken.
   Excluded until the ecosystem produces a successor.
-- **Pi-hole, Mealie** — not media automation. They belong in a user's override file,
-  not in the product.
+- **Anything that isn't media automation** — the registry has one job. Whatever else
+  a box runs belongs in the user's override file, not in the product.
 - **Whisparr, second Radarr instances, Tautulli-class extras** — later, if the registry
   makes them cheap; never at the cost of the core promise.
 

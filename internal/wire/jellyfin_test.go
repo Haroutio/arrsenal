@@ -98,7 +98,7 @@ func (f *fakeJellyfin) server() *httptest.Server {
 
 func jfTarget(url string) JellyfinTarget {
 	return JellyfinTarget{
-		URL: url, AdminUser: "harout", AdminPass: "jf-pass-SECRET",
+		URL: url, AdminUser: "adminuser", AdminPass: "jf-pass-SECRET",
 		HWAccel: "nvenc", TranscodePath: "/transcode",
 		Libraries: []JellyfinLibrary{
 			{Name: "Movies", CollectionType: "movies", Path: "/media/movies"},
@@ -127,7 +127,7 @@ func TestJellyfinFreshRunsTheWholeLane(t *testing.T) {
 			t.Fatalf("everything should wire on fresh: %+v", r)
 		}
 	}
-	if f.adminName != "harout" || f.adminPass != "jf-pass-SECRET" {
+	if f.adminName != "adminuser" || f.adminPass != "jf-pass-SECRET" {
 		t.Fatalf("admin not created: %q", f.adminName)
 	}
 	if !f.wizardDone {

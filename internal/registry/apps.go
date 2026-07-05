@@ -7,10 +7,11 @@ package registry
 // Homepage); LinuxServer.io for the arr suite and download clients, whose
 // uniform PUID/PGID/UMASK handling is what makes consistent ownership possible.
 //
-// Deliberately absent, per DESIGN.md: Readarr (retired upstream), Pi-hole and
-// Mealie (not media automation), Plex/Emby/Overseerr (v0.3, with paywall
-// warnings). Homepage gets no docker.sock mount — even read-only it is
-// root-equivalent, and service widgets work through API keys instead (§9).
+// Deliberately absent, per DESIGN.md: Readarr (retired upstream) and anything
+// that isn't media automation — the registry has one job; other apps belong
+// in the user's override file. Homepage gets no docker.sock mount — even
+// read-only it is root-equivalent, and service widgets work through API keys
+// instead (§9).
 var apps = []App{
 	{
 		ID:          "jellyfin",
