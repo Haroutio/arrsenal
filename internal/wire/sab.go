@@ -64,6 +64,11 @@ func EnsureSABHardening(ctx context.Context, sab *Client) Result {
 		{"unwanted_extensions", trashUnwantedExtensions},
 		{"action_on_unwanted_extensions", "2"}, // fail the job, into History
 		{"unwanted_extensions_mode", "0"},      // blacklist
+		// Encrypted RARs are password-scam junk virtually without
+		// exception; SAB's default merely PAUSES them, parking garbage in
+		// the queue until a human notices. Aborting fails the job so the
+		// arr grabs an alternative release on its own (field-proven).
+		{"pause_on_pwrar", "2"},
 		{"direct_unpack", "1"},
 		{"flat_unpack", "1"},
 	} {

@@ -197,13 +197,13 @@ func TestEnsureSABHardeningAppliesTRaSHBlocklist(t *testing.T) {
 	c := NewSABClient(srv.URL, "k")
 	c.backoff = time.Millisecond
 	r := EnsureSABHardening(context.Background(), c)
-	if r.Outcome != OutcomeWired || sets.Load() != 5 {
+	if r.Outcome != OutcomeWired || sets.Load() != 6 {
 		t.Fatalf("factory SAB must be hardened: %+v sets=%d %v", r, sets.Load(), log)
 	}
 	joined := strings.Join(log, "|")
 	for _, want := range []string{"unwanted_extensions=", "exe", "vbs", "ps1",
 		"action_on_unwanted_extensions=2", "unwanted_extensions_mode=0",
-		"direct_unpack=1", "flat_unpack=1"} {
+		"pause_on_pwrar=2", "direct_unpack=1", "flat_unpack=1"} {
 		if !strings.Contains(joined, want) {
 			t.Fatalf("missing %q in writes: %v", want, log)
 		}
