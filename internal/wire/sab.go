@@ -28,6 +28,56 @@ func sabPath(key, mode string, extra url.Values) string {
 	return "/api?" + v.Encode()
 }
 
+// trashUnwantedExtensions is the TRaSH guide's SABnzbd blocklist
+// (Downloaders/SABnzbd/Basic-Setup, copied verbatim): executable and
+// script extensions that have no business inside a media download —
+// malware rides usenet in exactly these wrappers.
+const trashUnwantedExtensions = "ade, adp, app, application, appref-ms, asp, aspx, asx, bas, bat, bgi, cab, cer, chm, cmd, cnt, com, cpl, crt, csh, der, diagcab, exe, fxp, gadget, grp, hlp, hpj, hta, htc, inf, ins, iso, isp, its, jar, jnlp, js, jse, ksh, lnk, mad, maf, mag, mam, maq, mar, mas, mat, mau, mav, maw, mcf, mda, mdb, mde, mdt, mdw, mdz, msc, msh, msh1, msh2, mshxml, msh1xml, msh2xml, msi, msp, mst, msu, ops, osd, pcd, pif, pl, plg, prf, prg, printerexport, ps1, ps1xml, ps2, ps2xml, psc1, psc2, psd1, psdm1, pst, py, pyc, pyo, pyw, pyz, pyzw, reg, scf, scr, sct, shb, shs, sln, theme, tmp, url, vb, vbe, vbp, vbs, vcxproj, vhd, vhdx, vsmacros, vsw, webpnp, website, ws, wsc, wsf, wsh, xbap, xll, xnk"
+
+// EnsureSABHardening applies the TRaSH-recommended protections SAB ships
+// WITHOUT: the unwanted-extensions blocklist set to fail matching jobs
+// (SAB's default is an empty list and action "do nothing"), plus direct
+// and flattened unpacking. An empty blocklist is the factory state, not a
+// choice — same reasoning as completing never-configured auth — so it is
+// completed even on adopted installs; any existing list is the user's and
+// is never touched.
+func EnsureSABHardening(ctx context.Context, sab *Client) Result {
+	conn := "SABnzbd ← unwanted-extension protection"
+
+	var cfg struct {
+		Config struct {
+			Misc struct {
+				UnwantedExtensions []string `json:"unwanted_extensions"`
+			} `json:"misc"`
+		} `json:"config"`
+	}
+	if err := sab.GetJSON(ctx, sabPath(sab.key, "get_config", url.Values{"section": {"misc"}}), &cfg); err != nil {
+		return Result{Connection: conn, Outcome: OutcomeFailed,
+			Detail: fmt.Sprintf("reading SABnzbd config: %v", err)}
+	}
+	if len(cfg.Config.Misc.UnwantedExtensions) > 0 {
+		return Result{Connection: conn, Outcome: OutcomeExisted,
+			Detail: "an extension list is already configured — left untouched"}
+	}
+
+	for _, kv := range [][2]string{
+		{"unwanted_extensions", trashUnwantedExtensions},
+		{"action_on_unwanted_extensions", "2"}, // fail the job, into History
+		{"unwanted_extensions_mode", "0"},      // blacklist
+		{"direct_unpack", "1"},
+		{"flat_unpack", "1"},
+	} {
+		err := sab.GetJSON(ctx, sabPath(sab.key, "set_config",
+			url.Values{"section": {"misc"}, "keyword": {kv[0]}, "value": {kv[1]}}), nil)
+		if err != nil {
+			return Result{Connection: conn, Outcome: OutcomeFailed,
+				Detail: fmt.Sprintf("setting %s: %v", kv[0], err)}
+		}
+	}
+	return Result{Connection: conn, Outcome: OutcomeWired,
+		Detail: "TRaSH blocklist (exe, js, vbs, …) fails matching jobs; direct+flat unpack on"}
+}
+
 // EnsureSABFolders points SABnzbd's download directories at the shared data
 // tree — but ONLY when they still sit at SAB's stock defaults. A fresh
 // install downloads into its own config volume (Downloads/…), which

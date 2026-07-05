@@ -91,6 +91,10 @@ jobs:
             'select(.authenticationMethod=="forms")' "lidarr auth is forms (api v1)"
           echo "usenet provider registered in SAB:"
           grep -E '^host = news.example.test' /tmp/arrtest/appdata/sabnzbd/sabnzbd.ini
+          echo "SAB hardened — TRaSH blocklist fails unwanted extensions:"
+          grep -E '^unwanted_extensions = .*exe' /tmp/arrtest/appdata/sabnzbd/sabnzbd.ini >/dev/null
+          grep -qE '^action_on_unwanted_extensions = 2' /tmp/arrtest/appdata/sabnzbd/sabnzbd.ini
+          grep -qE '^direct_unpack = 1' /tmp/arrtest/appdata/sabnzbd/sabnzbd.ini
           assert_json http://localhost:8989/api/v3/config/naming "X-Api-Key: $SONK" \
             'select(.renameEpisodes==true and (.standardEpisodeFormat | contains("Custom Formats")))' \
             "sonarr renames with the TRaSH naming scheme"

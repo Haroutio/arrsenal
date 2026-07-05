@@ -171,6 +171,59 @@ func TestSABKeyNeverLeaksFromQueryString(t *testing.T) {
 	}
 }
 
+func fakeSABMisc(t *testing.T, extensions string, sets *atomic.Int32, setLog *[]string) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		switch q.Get("mode") {
+		case "get_config":
+			_, _ = w.Write([]byte(`{"config":{"misc":{"unwanted_extensions":[` + extensions + `]}}}`))
+		case "set_config":
+			sets.Add(1)
+			*setLog = append(*setLog, q.Get("keyword")+"="+q.Get("value"))
+			_, _ = w.Write([]byte(`{"config":{}}`))
+		default:
+			w.WriteHeader(http.StatusBadRequest)
+		}
+	}))
+}
+
+func TestEnsureSABHardeningAppliesTRaSHBlocklist(t *testing.T) {
+	var sets atomic.Int32
+	var log []string
+	srv := fakeSABMisc(t, "", &sets, &log) // SAB's factory state: empty list
+	defer srv.Close()
+
+	c := NewSABClient(srv.URL, "k")
+	c.backoff = time.Millisecond
+	r := EnsureSABHardening(context.Background(), c)
+	if r.Outcome != OutcomeWired || sets.Load() != 5 {
+		t.Fatalf("factory SAB must be hardened: %+v sets=%d %v", r, sets.Load(), log)
+	}
+	joined := strings.Join(log, "|")
+	for _, want := range []string{"unwanted_extensions=", "exe", "vbs", "ps1",
+		"action_on_unwanted_extensions=2", "unwanted_extensions_mode=0",
+		"direct_unpack=1", "flat_unpack=1"} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("missing %q in writes: %v", want, log)
+		}
+	}
+}
+
+func TestEnsureSABHardeningNeverTouchesAnExistingList(t *testing.T) {
+	var sets atomic.Int32
+	var log []string
+	srv := fakeSABMisc(t, `"exe","iso"`, &sets, &log)
+	defer srv.Close()
+
+	c := NewSABClient(srv.URL, "k")
+	c.backoff = time.Millisecond
+	r := EnsureSABHardening(context.Background(), c)
+	if r.Outcome != OutcomeExisted || sets.Load() != 0 {
+		t.Fatalf("an existing list is the user's: %+v sets=%d", r, sets.Load())
+	}
+}
+
 // fakeSABServers models the servers section: a get that lists what exists,
 // a set that records the exact registration query, and the test_server
 // endpoint answering testResult/testMessage.
