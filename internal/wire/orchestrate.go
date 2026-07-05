@@ -153,6 +153,7 @@ func Orchestrate(ctx context.Context, spec Spec) []Result {
 		// client the user finishes later.
 		results = emit(results, steps...)
 		sabReady = !Failed(steps)
+		results = emit(results, EnsureSABHardening(ctx, sab))
 		for _, p := range spec.Usenet {
 			results = emit(results, EnsureSABServer(ctx, sab, p))
 		}

@@ -243,12 +243,23 @@ func interactiveFill(s *state.State, o *options) error {
 				// block account) — loop like the indexers do.
 				question = "Add another usenet provider (a backup or block account)?"
 				var provider, user, pass string
-				fmt.Print("Provider [newshosting]: ")
-				if line, err := stdinReader.ReadString('\n'); err == nil {
-					provider = strings.TrimSpace(line)
-				}
-				if provider == "" {
-					provider = "newshosting"
+				for {
+					fmt.Print("Provider — preset name or server hostname (e.g. news.newsdemon.com) [newshosting]: ")
+					if line, err := stdinReader.ReadString('\n'); err == nil {
+						provider = strings.TrimSpace(line)
+					}
+					if provider == "" {
+						provider = "newshosting"
+					}
+					// A typo'd or unknown name must not silently become a
+					// bogus "hostname" — SAB would register a server that
+					// can never connect (field report). Presets have no
+					// dot; real server hostnames always do.
+					if _, ok := wire.UsenetPresets[strings.ToLower(provider)]; ok || strings.Contains(provider, ".") {
+						break
+					}
+					fmt.Printf("%q is not a preset (newshosting, eweka, usenetserver, frugal, easynews) — enter one of those, or your provider's full server address like news.newsdemon.com\n", provider)
+					provider = ""
 				}
 				fmt.Print("Provider username: ")
 				if line, err := stdinReader.ReadString('\n'); err == nil {
