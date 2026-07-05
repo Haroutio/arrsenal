@@ -41,7 +41,7 @@ func TestResolveUsenetProvider(t *testing.T) {
 
 	// A preset fills host/port/ssl/connections.
 	p := resolveUsenetProvider(options{usenetProvider: "Newshosting", usenetUser: "u", usenetPass: "pw"})
-	if p == nil || p.Host != "news.newshosting.com" || p.Port != 563 || !p.SSL || p.Connections != 30 {
+	if p == nil || p.Host != "news.newshosting.com" || p.Port != 563 || !p.SSL || p.Connections != 100 {
 		t.Fatalf("preset not applied: %+v", p)
 	}
 
@@ -49,7 +49,7 @@ func TestResolveUsenetProvider(t *testing.T) {
 	// for the address, and generic defaults would waste the provider's
 	// tuned connection count.
 	p = resolveUsenetProvider(options{usenetProvider: "news.newshosting.com", usenetUser: "u", usenetPass: "pw"})
-	if p == nil || p.Name != "Newshosting" || p.Connections != 30 {
+	if p == nil || p.Name != "Newshosting" || p.Connections != 100 {
 		t.Fatalf("preset host not matched: %+v", p)
 	}
 

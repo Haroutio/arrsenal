@@ -356,17 +356,32 @@ func Orchestrate(ctx context.Context, spec Spec) []Result {
 	// user's, and renaming a curated library out from under someone is the
 	// kind of surprise this tool exists to prevent.
 	if spec.TRaSH != nil {
+		// The folder-ID naming variant follows the stack's media server
+		// (jellyfin outranks plex outranks emby, same precedence Seerr
+		// uses); no server selected → the plain default format.
+		mediaServer := ""
+		for _, id := range []string{"emby", "plex", "jellyfin"} {
+			if _, ok := sel[id]; ok {
+				mediaServer = id
+			}
+		}
 		if a, ok := sel["sonarr"]; ok && keys["sonarr"] != "" {
 			c := arrClient("sonarr")
 			results = emit(results,
-				EnsureSonarrNaming(ctx, c, settingsAdopted("sonarr")),
+				EnsureSonarrNaming(ctx, c, mediaServer, settingsAdopted("sonarr")),
 				EnsureMediaManagement(ctx, c, a.APIBase, a.Name, settingsAdopted("sonarr")))
+			if !settingsAdopted("sonarr") {
+				results = emit(results, CleanupStockProfiles(ctx, c, a.APIBase, a.Name))
+			}
 		}
 		if a, ok := sel["radarr"]; ok && keys["radarr"] != "" {
 			c := arrClient("radarr")
 			results = emit(results,
-				EnsureRadarrNaming(ctx, c, settingsAdopted("radarr")),
+				EnsureRadarrNaming(ctx, c, mediaServer, settingsAdopted("radarr")),
 				EnsureMediaManagement(ctx, c, a.APIBase, a.Name, settingsAdopted("radarr")))
+			if !settingsAdopted("radarr") {
+				results = emit(results, CleanupStockProfiles(ctx, c, a.APIBase, a.Name))
+			}
 		}
 	}
 

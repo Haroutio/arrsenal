@@ -312,7 +312,7 @@ func TestEnsureSABServerRegistersProvider(t *testing.T) {
 		t.Fatalf("a passing connection test should say so: %+v", r)
 	}
 	for _, want := range []string{"host=news.newshosting.com", "port=563", "ssl=1",
-		"username=demo", "connections=30", "enable=1"} {
+		"username=demo", "connections=100", "enable=1"} {
 		if !strings.Contains(lastQuery, want) {
 			t.Fatalf("registration query missing %q:\n%s", want, lastQuery)
 		}

@@ -72,8 +72,11 @@ manual lines in the report.
 **TRaSH quality settings.** Three questions — 1080p or 4K, standard tier
 or remuxes, anime or not — and Recyclarr syncs the matching [TRaSH
 Guides](https://trash-guides.info) profiles into Sonarr and Radarr, now and
-on a daily schedule. Fresh installs also get the guides' naming scheme and
-file-management defaults. Details and caveats: [the README
+on a daily schedule. Fresh installs also get the guides' naming scheme
+(with the folder-ID style matching your media server — Jellyfin, Plex and
+Emby each want their own), file-management defaults, and the arrs' factory
+quality profiles cleared once the TRaSH ones exist, so the dropdowns only
+offer profiles that mean something. Details and caveats: [the README
 section](../README.md#trash-guide-quality-profiles).
 
 **Usenet provider** (fresh SABnzbd only): pick a preset — Newshosting,

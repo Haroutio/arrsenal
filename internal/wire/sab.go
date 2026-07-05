@@ -251,15 +251,17 @@ type UsenetProvider struct {
 }
 
 // UsenetPresets are the major commercial providers, keyed by the lowercase
-// name a user types. Ports are the standard TLS endpoints; connection counts
-// are each provider's documented allowance at the common tier (SAB treats
-// too-high counts as errors mid-download, so conservative beats optimistic).
+// name a user types. Ports are the standard TLS endpoints; connection
+// counts are each provider's OFFICIALLY documented allowance (their own
+// help pages, verified 2026-07): Newshosting 100, Eweka 50, UsenetServer
+// 20, Frugal 100, Easynews 60. SAB idles unused connections, so the full
+// allowance costs nothing and undersizing throttles fast lines.
 var UsenetPresets = map[string]UsenetProvider{
-	"newshosting":  {Name: "Newshosting", Host: "news.newshosting.com", Port: 563, SSL: true, Connections: 30},
-	"eweka":        {Name: "Eweka", Host: "news.eweka.nl", Port: 563, SSL: true, Connections: 20},
+	"newshosting":  {Name: "Newshosting", Host: "news.newshosting.com", Port: 563, SSL: true, Connections: 100},
+	"eweka":        {Name: "Eweka", Host: "news.eweka.nl", Port: 563, SSL: true, Connections: 50},
 	"usenetserver": {Name: "UsenetServer", Host: "news.usenetserver.com", Port: 563, SSL: true, Connections: 20},
-	"frugal":       {Name: "Frugal Usenet", Host: "news.frugalusenet.com", Port: 563, SSL: true, Connections: 30},
-	"easynews":     {Name: "Easynews", Host: "news.easynews.com", Port: 563, SSL: true, Connections: 20},
+	"frugal":       {Name: "Frugal Usenet", Host: "news.frugalusenet.com", Port: 563, SSL: true, Connections: 100},
+	"easynews":     {Name: "Easynews", Host: "news.easynews.com", Port: 563, SSL: true, Connections: 60},
 }
 
 // EnsureSABServer registers the news server — the piece without which the
