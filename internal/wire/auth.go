@@ -47,6 +47,11 @@ func EnsureAuth(ctx context.Context, c *Client, appName, apiBase, username, pass
 	host["username"] = username
 	host["password"] = password
 	host["passwordConfirmation"] = password
+	// Privacy default while we hold the pen on a never-configured app:
+	// the arrs ship with anonymous usage telemetry ON; a self-hosted stack
+	// an installer provisions should not phone home (research-audit
+	// finding). Takes effect on the app's next restart.
+	host["analyticsEnabled"] = false
 
 	path := apiBase + "/config/host"
 	if id, ok := host["id"]; ok {

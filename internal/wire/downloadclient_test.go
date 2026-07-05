@@ -74,6 +74,12 @@ func TestEnsureDownloadClientSABnzbd(t *testing.T) {
 	if !p.Enable || p.Name != "SABnzbd" || p.ConfigContract != "SabnzbdSettings" {
 		t.Fatalf("envelope: %+v", p)
 	}
+	// A missing boolean deserializes as FALSE arr-side — these two dropped
+	// out of the roundtrip once, and created clients never cleaned up
+	// after imports (research-audit finding).
+	if !p.RemoveCompletedDownloads || !p.RemoveFailedDownloads {
+		t.Fatalf("remove-after-import pair must be set: %+v", p)
+	}
 	got := fieldsOf(p)
 	if got["host"] != "sabnzbd" || got["apiKey"] != "sab-key" || got["tvCategory"] != "tv" {
 		t.Fatalf("fields: %v", got)

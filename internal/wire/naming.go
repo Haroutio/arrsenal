@@ -86,10 +86,14 @@ func EnsureRadarrNaming(ctx context.Context, c *Client, adopted bool) Result {
 	return Result{Connection: conn, Outcome: OutcomeWired}
 }
 
-// EnsureMediaManagement applies the guide's two companion toggles to a
-// FRESH arr: propers/repacks to "Do Not Prefer" (the custom formats score
-// them now — the old toggle fights the CF system), and analyze video files
-// on (accurate mediainfo prevents re-download loops).
+// EnsureMediaManagement applies the guide's companion toggles to a FRESH
+// arr: propers/repacks to "Do Not Prefer" (the custom formats score them
+// now — the old toggle fights the CF system), analyze video files on
+// (accurate mediainfo prevents re-download loops), and sidecar-subtitle
+// import (srt only — releases often ship subs that would otherwise be
+// discarded, and Bazarr tracks imported ones). On Sonarr, episode titles
+// are required only for season packs: the default "always" stalls daily
+// and freshly-aired episodes in the queue while TVDB still says TBA.
 func EnsureMediaManagement(ctx context.Context, c *Client, apiBase, arrName string, adopted bool) Result {
 	conn := arrName + " ← media management defaults"
 	if adopted {
@@ -102,12 +106,18 @@ func EnsureMediaManagement(ctx context.Context, c *Client, apiBase, arrName stri
 		return Result{Connection: conn, Outcome: OutcomeFailed,
 			Detail: fmt.Sprintf("reading media management config: %v", err)}
 	}
-	if cfg["downloadPropersAndRepacks"] == "doNotPrefer" && cfg["enableMediaInfo"] == true {
+	if cfg["downloadPropersAndRepacks"] == "doNotPrefer" && cfg["enableMediaInfo"] == true &&
+		cfg["importExtraFiles"] == true {
 		return Result{Connection: conn, Outcome: OutcomeExisted}
 	}
 
 	cfg["downloadPropersAndRepacks"] = "doNotPrefer"
 	cfg["enableMediaInfo"] = true
+	cfg["importExtraFiles"] = true
+	cfg["extraFileExtensions"] = "srt"
+	if _, isSonarr := cfg["episodeTitleRequired"]; isSonarr {
+		cfg["episodeTitleRequired"] = "bulkSeasonReleases"
+	}
 	if err := putConfig(ctx, c, apiBase+"/config/mediamanagement", cfg); err != nil {
 		return Result{Connection: conn, Outcome: OutcomeFailed,
 			Detail: fmt.Sprintf("applying media management defaults: %v", err)}

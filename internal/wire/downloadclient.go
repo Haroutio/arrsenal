@@ -23,13 +23,21 @@ type DownloadClientTarget struct {
 
 // downloadClient mirrors the arr downloadclient resource loosely.
 type downloadClient struct {
-	Name           string     `json:"name"`
-	Implementation string     `json:"implementation"`
-	ConfigContract string     `json:"configContract"`
-	Protocol       string     `json:"protocol,omitempty"`
-	Enable         bool       `json:"enable"`
-	Priority       int        `json:"priority,omitempty"`
-	Fields         []appField `json:"fields"`
+	Name           string `json:"name"`
+	Implementation string `json:"implementation"`
+	ConfigContract string `json:"configContract"`
+	Protocol       string `json:"protocol,omitempty"`
+	Enable         bool   `json:"enable"`
+	// The remove-after-import pair must survive the schema→POST roundtrip:
+	// this struct DROPS unknown fields, and a missing boolean deserializes
+	// as false arr-side — created clients then never cleaned SAB's history
+	// or the torrent queue after import, and un-imported jobs eventually
+	// fall past the arr's history-scan window (research-audit finding).
+	// Torrent removal only happens after seed goals are met (v4+).
+	RemoveCompletedDownloads bool       `json:"removeCompletedDownloads"`
+	RemoveFailedDownloads    bool       `json:"removeFailedDownloads"`
+	Priority                 int        `json:"priority,omitempty"`
+	Fields                   []appField `json:"fields"`
 }
 
 // EnsureDownloadClient registers a download client in one arr
@@ -69,6 +77,8 @@ func EnsureDownloadClient(ctx context.Context, arr *Client, t DownloadClientTarg
 
 			tmpl.Name = t.ClientName
 			tmpl.Enable = true
+			tmpl.RemoveCompletedDownloads = true
+			tmpl.RemoveFailedDownloads = true
 			for i, f := range tmpl.Fields {
 				switch {
 				case f.Name == "host":

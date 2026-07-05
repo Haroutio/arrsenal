@@ -154,6 +154,9 @@ func Orchestrate(ctx context.Context, spec Spec) []Result {
 		results = emit(results, steps...)
 		sabReady = !Failed(steps)
 		results = emit(results, EnsureSABHardening(ctx, sab))
+		if spec.AdminPass != "" {
+			results = emit(results, EnsureSABAuth(ctx, sab, spec.AdminUser, spec.AdminPass))
+		}
 		for _, p := range spec.Usenet {
 			results = emit(results, EnsureSABServer(ctx, sab, p))
 		}

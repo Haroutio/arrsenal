@@ -99,8 +99,15 @@ jobs:
             'select(.renameEpisodes==true and (.standardEpisodeFormat | contains("Custom Formats")))' \
             "sonarr renames with the TRaSH naming scheme"
           assert_json http://localhost:8989/api/v3/config/mediamanagement "X-Api-Key: $SONK" \
-            'select(.downloadPropersAndRepacks=="doNotPrefer" and .enableMediaInfo==true)' \
-            "sonarr media management defaults applied"
+            'select(.downloadPropersAndRepacks=="doNotPrefer" and .enableMediaInfo==true and .importExtraFiles==true and .episodeTitleRequired=="bulkSeasonReleases")' \
+            "sonarr media management defaults applied (incl. srt import + title-stall guard)"
+          assert_json http://localhost:8989/api/v3/config/host "X-Api-Key: $SONK" \
+            'select(.analyticsEnabled==false)' "sonarr telemetry disabled"
+          assert_json http://localhost:8989/api/v3/downloadclient "X-Api-Key: $SONK" \
+            '.[] | select(.name=="SABnzbd" and .removeCompletedDownloads==true and .removeFailedDownloads==true)' \
+            "sonarr's SABnzbd client cleans up after imports"
+          echo "SAB web UI credential set:"
+          grep -qE '^username = ci' /tmp/arrtest/appdata/sabnzbd/sabnzbd.ini
           echo "scheduled recyclarr service is running (and not crash-looping):"
           [ "$(docker inspect -f '{{.State.Status}}' recyclarr)" = running ]
           [ "$(docker inspect -f '{{.RestartCount}}' recyclarr)" -le 1 ]
