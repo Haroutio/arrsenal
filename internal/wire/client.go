@@ -117,6 +117,13 @@ func (c *Client) PostForm(ctx context.Context, path string, form url.Values, out
 	return c.do(ctx, http.MethodPost, path, form, out)
 }
 
+// Delete removes a resource. Wiring only deletes things it can PROVE are
+// factory artifacts (stock quality profiles with TRaSH replacements in
+// place) — user-created resources are never deletion candidates.
+func (c *Client) Delete(ctx context.Context, path string) error {
+	return c.do(ctx, http.MethodDelete, path, nil, nil)
+}
+
 // errf builds an error with every registered secret scrubbed — paths can
 // carry keys in query strings (SABnzbd), bodies can be echoed by servers.
 func (c *Client) errf(format string, args ...any) error {

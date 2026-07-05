@@ -80,6 +80,9 @@ jobs:
           grep -qE '^complete_dir = /data/usenet/complete' /tmp/arrtest/appdata/sabnzbd/sabnzbd.ini
           assert_json http://localhost:8989/api/v3/qualityprofile "X-Api-Key: $SONK" \
             '.[] | select(.name=="WEB-1080p")' "TRaSH WEB-1080p quality profile synced into sonarr"
+          assert_json http://localhost:8989/api/v3/qualityprofile "X-Api-Key: $SONK" \
+            '[.[] | select(.name=="Any" or .name=="HD-1080p")] | length == 0' \
+            "stock quality profiles removed once TRaSH profiles exist"
           # Lidarr speaks /api/v1 — the wiring assumed v3 once and a real
           # install ate three 404s; these assertions make that unrepeatable.
           LIDK=$(sed -nE 's#.*<ApiKey>([^<]+)</ApiKey>.*#\1#p' /tmp/arrtest/appdata/lidarr/config.xml)
